@@ -334,3 +334,7 @@ button { font-family: inherit; cursor: pointer; }
   padding: 2px 2px 0;
 }
 .categoria-tabs.em-busca .categoria-tab { opacity: 0.45; }
+
+/* Código Martins e código de barras na mesma linha (desce sozinho em tela muito estreita) */
+.item-codigos-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.item-cod { font-size: 10.5px; color: #5E5D59; white-space: nowrap; }
