@@ -1,0 +1,1225 @@
+// ============================================================
+// MATERIAL ESCOLAR — página do cliente final
+// ============================================================
+// Cópia do "Ofertas da Semana" adaptada: lê a tabela escolar_itens (fica
+// no ar o ano todo, sem período de semana), mostra o código de barras em
+// destaque e usa as cores do Material Escolar. Fotos vêm do mesmo banco do
+// Ofertas da Semana (ofertas_fotos, por código Martins).
+// Um site só pra todos os vendedores — sem repositório por pessoa. O
+// vendedor é identificado pelo parâmetro "v" na URL (o slug cadastrado no
+// Painel de Vendedores, na marca "Material Escolar"); os dados dele
+// (nome, foto, WhatsApp, área) vêm do Supabase na hora que a página abre.
+
+// ---------------- CATEGORIAS: cor e ícone ----------------
+const CATEGORIAS_INFO = {
+  "Borrachas e Apontadores": { bg: "#FCE9EE", fg: "#B0345A" },
+  "Canetas": { bg: "#E4ECFA", fg: "#1E4FA3" },
+  "Canetinhas": { bg: "#EFE6F8", fg: "#6B3FA0" },
+  "Colas": { bg: "#E6F4EE", fg: "#1D7A55" },
+  "Corretivos": { bg: "#EEF1F4", fg: "#4A5868" },
+  "Escritório": { bg: "#ECEBE6", fg: "#5E5D59" },
+  "Estojos": { bg: "#FFF1DD", fg: "#A35F0A" },
+  "Lápis de Cor, Giz e Massinha": { bg: "#FDEBE2", fg: "#B4481F" },
+  "Lápis, Lapiseiras e Grafites": { bg: "#FFF6D6", fg: "#8A6A00" },
+  "Marca-texto e Marcadores": { bg: "#F3F8DC", fg: "#5E7A10" },
+  "Mochilas": { bg: "#E2F1F6", fg: "#1A6E86" },
+  "Réguas": { bg: "#E8EEF8", fg: "#33558C" },
+  "Tesouras e Estiletes": { bg: "#F1E9E4", fg: "#7A4A30" },
+  "Outros": { bg: "#ECECEA", fg: "#5E5D59" },
+};
+const ORDEM_CATEGORIAS = Object.keys(CATEGORIAS_INFO);
+
+function infoCategoria(categoria) {
+  return CATEGORIAS_INFO[categoria] || CATEGORIAS_INFO["Outros"];
+}
+
+// Ícone de lápis pra qualquer categoria (só aparece em item ainda sem foto).
+function iconeCategoria(categoria, cor) {
+  return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${cor}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"></path></svg>`;
+}
+
+// ---------------- SUPABASE ----------------
+let _client = null;
+function getClient() {
+  if (_client) return _client;
+  _client = window.supabase.createClient(CONFIG.supabase.url, CONFIG.supabase.anonKey);
+  return _client;
+}
+
+// ---------------- TROCA DE TELA ----------------
+const ESTADOS = ["tela-carregando", "tela-erro", "tela-pausado", "tela-vazio", "app"];
+function mostrarEstado(id) {
+  ESTADOS.forEach((e) => { document.getElementById(e).hidden = e !== id; });
+}
+
+function pegarSlugDaUrl() {
+  return new URLSearchParams(window.location.search).get("v");
+}
+
+// Grava uma linha toda vez que o link é aberto — é o que permite o
+// Leonardo ver depois quais vendedores usam mais essa ferramenta. Não
+// trava a navegação se falhar.
+async function registrarVisita(slug) {
+  try {
+    await getClient().from("escolar_visualizacoes").insert({ vendedor_slug: slug });
+  } catch (erro) {
+    console.error("[Material Escolar] Não consegui registrar a visita:", erro);
+  }
+}
+
+async function buscarVendedor(slug) {
+  const { data, error } = await getClient()
+    .from("vendedores")
+    .select("nome, area, whatsapp, foto_url, ativo")
+    .eq("slug", slug)
+    .eq("marca", "Material Escolar")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Todos os itens de Material Escolar publicados pra área do vendedor (sem
+// período de semana — o catálogo fica no ar o ano todo). Busca em blocos
+// de 1000 porque o Supabase entrega no máximo 1000 linhas por vez.
+async function buscarItensEscolar(area) {
+  const itens = [];
+  const bloco = 1000;
+  for (let inicio = 0; ; inicio += bloco) {
+    const { data, error } = await getClient()
+      .from("escolar_itens")
+      .select("codigo, codigo_barras, descricao, categoria, preco, ordem")
+      .eq("area", area)
+      .order("ordem", { ascending: true })
+      .range(inicio, inicio + bloco - 1);
+    if (error) throw error;
+    itens.push(...(data || []));
+    if (!data || data.length < bloco) break;
+  }
+  return anexarFotosDosProdutos(itens);
+}
+
+// Produtos que já tiverem foto cadastrada (banco de fotos, por código
+// Martins) mostram a foto de verdade no lugar do ícone da categoria.
+async function anexarFotosDosProdutos(itens) {
+  if (itens.length === 0) return itens;
+  try {
+    // Em blocos de 200 códigos, pra o endereço da consulta não ficar
+    // grande demais quando o catálogo crescer.
+    const codigos = itens.map((i) => i.codigo);
+    const fotoPorCodigo = new Map();
+    for (let i = 0; i < codigos.length; i += 200) {
+      const { data, error } = await getClient()
+        .from("ofertas_fotos")
+        .select("codigo, foto_url")
+        .in("codigo", codigos.slice(i, i + 200));
+      if (error) throw error;
+      (data || []).forEach((f) => { if (f.foto_url) fotoPorCodigo.set(f.codigo, f.foto_url); });
+    }
+    return itens.map((item) => ({ ...item, foto_url: fotoPorCodigo.get(item.codigo) || null }));
+  } catch (erro) {
+    console.error("[Material Escolar] Não consegui buscar as fotos dos produtos:", erro);
+    return itens;
+  }
+}
+
+function formatarDataCurta(dataISO) {
+  if (!dataISO) return "";
+  const [, mes, dia] = dataISO.split("-");
+  return `${dia}/${mes}`;
+}
+
+function formatarPreco(valor) {
+  return "R$ " + Number(valor).toFixed(2).replace(".", ",");
+}
+
+// Só o número, sem o "R$" na frente — usado nos cartões do PNG/PDF, onde
+// o "R$" já aparece separado, como um rótulo pequeno em cima do preço.
+function formatarPrecoSemPrefixo(valor) {
+  return Number(valor).toFixed(2).replace(".", ",");
+}
+
+// ---------------- ESTADO DA PÁGINA (interesse / quantidade) ----------------
+const QTY = new Map(); // codigo -> quantidade
+let TODOS_ITENS = [];
+let CATEGORIA_ATIVA = "todos";
+let VENDEDOR_WHATSAPP = null;
+let AREA_VENDEDOR = "SC";
+let VENDEDOR_FOTO_URL = null;
+
+function inc(codigo) {
+  QTY.set(codigo, (QTY.get(codigo) || 0) + 1);
+  renderizarItens();
+  atualizarRodape();
+}
+function dec(codigo) {
+  QTY.set(codigo, Math.max(0, (QTY.get(codigo) || 0) - 1));
+  renderizarItens();
+  atualizarRodape();
+}
+function toggleInteresse(codigo) {
+  const atual = QTY.get(codigo) || 0;
+  QTY.set(codigo, atual > 0 ? 0 : 1);
+  renderizarItens();
+  atualizarRodape();
+}
+
+function renderizarAbas() {
+  // Mostra aba pra qualquer categoria que tiver item de verdade — não só
+  // as 10 fixas de CATEGORIAS_INFO — pra categoria nova criada no Painel
+  // de Preços também aparecer aqui (ela só não tem cor/ícone específicos,
+  // usa o visual genérico de "Outros" via infoCategoria/iconeCategoria).
+  // Em ordem alfabética.
+  const categoriasPresentes = Array.from(new Set(TODOS_ITENS.map((i) => i.categoria)))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const abas = [{ key: "todos", label: "Todos" }, ...categoriasPresentes.map((c) => ({ key: c, label: c }))];
+
+  const nav = document.getElementById("categoria-tabs");
+  nav.innerHTML = abas
+    .map((a) => `<button type="button" class="categoria-tab${a.key === CATEGORIA_ATIVA ? " ativa" : ""}" data-key="${escapeAttr(a.key)}">${escapeHtml(a.label)}</button>`)
+    .join("");
+  nav.querySelectorAll(".categoria-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      CATEGORIA_ATIVA = btn.dataset.key;
+      renderizarAbas();
+      renderizarItens();
+      // Ao trocar de aba, volta a rolagem pro início — senão a lista nova
+      // abre no meio, na mesma posição em que a aba anterior tinha ficado.
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  });
+}
+
+function renderizarItens() {
+  const lista = document.getElementById("lista-itens");
+  const itensFiltrados = TODOS_ITENS
+    .filter((i) => CATEGORIA_ATIVA === "todos" || i.categoria === CATEGORIA_ATIVA)
+    .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+
+  if (itensFiltrados.length === 0) {
+    lista.innerHTML = '<p class="sem-itens">Nenhum item nessa categoria.</p>';
+    return;
+  }
+
+  lista.innerHTML = itensFiltrados
+    .map((item) => {
+      const info = infoCategoria(item.categoria);
+      const qty = QTY.get(item.codigo) || 0;
+      const interessado = qty > 0;
+      return `
+        <div class="item-card" style="background: ${info.bg};">
+          <div class="item-icone"${item.foto_url ? ` style="background-image:url('${escapeAttr(item.foto_url)}')"` : ""}>${item.foto_url ? "" : iconeCategoria(item.categoria, info.fg)}</div>
+          <div class="item-corpo">
+            <div class="item-descricao">${escapeHtml(item.descricao)}</div>
+            <div class="item-codigos">
+              <span>Cód. ${escapeHtml(item.codigo)}</span>
+            </div>
+            ${item.codigo_barras ? `<div class="item-barras"><svg width="14" height="11" viewBox="0 0 14 11" aria-hidden="true"><path d="M0 0h1v11H0zM2 0h2v11H2zM5 0h1v11H5zM7 0h1v11H7zM9 0h2v11H9zM12 0h2v11h-2z" fill="currentColor"/></svg><span>${escapeHtml(item.codigo_barras)}</span></div>` : ""}
+            <div class="item-acao-linha">
+              <div class="item-preco">${formatarPreco(item.preco)}</div>
+              ${interessado
+                ? `<div class="item-qty" data-codigo="${escapeAttr(item.codigo)}">
+                     <button type="button" class="btn-dec" aria-label="Diminuir quantidade">−</button>
+                     <div class="qty-valor">${qty}</div>
+                     <button type="button" class="btn-inc" aria-label="Aumentar quantidade">+</button>
+                   </div>`
+                : `<button type="button" class="item-interesse-pill" data-codigo="${escapeAttr(item.codigo)}">Tenho interesse</button>`}
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  lista.querySelectorAll(".item-qty").forEach((el) => {
+    const codigo = el.dataset.codigo;
+    el.querySelector(".btn-dec").addEventListener("click", () => dec(codigo));
+    el.querySelector(".btn-inc").addEventListener("click", () => inc(codigo));
+  });
+  lista.querySelectorAll(".item-interesse-pill").forEach((btn) => {
+    btn.addEventListener("click", () => toggleInteresse(btn.dataset.codigo));
+  });
+}
+
+function atualizarRodape() {
+  const btn = document.getElementById("btn-enviar-interesse");
+  const btnPdf = document.getElementById("btn-gerar-pdf");
+  const btnPng = document.getElementById("btn-gerar-png");
+  const btnPdfPedido = document.getElementById("btn-pdf-pedido");
+  const totalItens = Array.from(QTY.values()).filter((q) => q > 0).length;
+  if (totalItens > 0) {
+    btn.textContent = `Enviar interesse (${totalItens} ${totalItens === 1 ? "item" : "itens"})`;
+    btn.disabled = false;
+    btnPdf.disabled = false;
+    btnPng.disabled = false;
+    btnPdfPedido.disabled = false;
+  } else {
+    btn.textContent = "Marque os itens de interesse";
+    btn.disabled = true;
+    btnPdf.disabled = true;
+    btnPng.disabled = true;
+    btnPdfPedido.disabled = true;
+  }
+}
+
+// Agrupa por categoria (ordem alfabética) e ordena os itens de cada
+// categoria também em ordem alfabética — mesma lógica usada na mensagem
+// do WhatsApp, reaproveitada aqui pro PDF.
+function agruparPorCategoriaOrdenado(itens) {
+  const porCategoria = new Map();
+  itens.forEach((item) => {
+    if (!porCategoria.has(item.categoria)) porCategoria.set(item.categoria, []);
+    porCategoria.get(item.categoria).push(item);
+  });
+  const categoriasOrdenadas = Array.from(porCategoria.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  return categoriasOrdenadas.map((categoria) => ({
+    categoria,
+    itens: porCategoria.get(categoria).sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR")),
+  }));
+}
+
+// Carrega a foto do produto (URL do Supabase) como base64, porque o jsPDF
+// só consegue inserir imagem já em base64 — não aceita link direto.
+async function carregarImagemComoDataUrl(url) {
+  try {
+    const resposta = await fetch(url);
+    if (!resposta.ok) return null;
+    const blob = await resposta.blob();
+    return await new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(leitor.result);
+      leitor.onerror = () => reject(new Error("Falha ao ler imagem"));
+      leitor.readAsDataURL(blob);
+    });
+  } catch (erro) {
+    console.error("[Material Escolar] Não consegui carregar imagem pro PDF:", erro);
+    return null;
+  }
+}
+
+function formatoDaImagem(dataUrl) {
+  if (dataUrl.startsWith("data:image/png")) return "PNG";
+  if (dataUrl.startsWith("data:image/webp")) return "WEBP";
+  return "JPEG";
+}
+
+// Caminho de retângulo arredondado no canvas (mesmo visual dos cartões do PDF).
+function desenharRetanguloArredondado(ctx, x, y, largura, altura, raio) {
+  ctx.beginPath();
+  ctx.moveTo(x + raio, y);
+  ctx.lineTo(x + largura - raio, y);
+  ctx.arcTo(x + largura, y, x + largura, y + raio, raio);
+  ctx.lineTo(x + largura, y + altura - raio);
+  ctx.arcTo(x + largura, y + altura, x + largura - raio, y + altura, raio);
+  ctx.lineTo(x + raio, y + altura);
+  ctx.arcTo(x, y + altura, x, y + altura - raio, raio);
+  ctx.lineTo(x, y + raio);
+  ctx.arcTo(x, y, x + raio, y, raio);
+  ctx.closePath();
+}
+
+// Desenha a foto preenchendo todo o espaço (largura x altura) sem esticar/
+// deformar — corta as sobras da foto original, igual o "preencher" do
+// Instagram, em vez de espremer a imagem pra caber.
+function desenharImagemPreenchendo(ctx, img, x, y, largura, altura) {
+  const razaoAlvo = largura / altura;
+  const razaoFoto = img.width / img.height;
+  let sx = 0, sy = 0, sLargura = img.width, sAltura = img.height;
+  if (razaoFoto > razaoAlvo) {
+    // Foto mais "larga" que o espaço: corta as laterais.
+    sLargura = img.height * razaoAlvo;
+    sx = (img.width - sLargura) / 2;
+  } else {
+    // Foto mais "alta" que o espaço: corta em cima/embaixo.
+    sAltura = img.width / razaoAlvo;
+    sy = (img.height - sAltura) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sLargura, sAltura, x, y, largura, altura);
+}
+
+// Quebra um texto em até "maxLinhas" linhas que cabem em "larguraMax" (usa a
+// fonte já configurada no ctx), cortando com "…" se sobrar texto.
+function quebrarTextoCanvas(ctx, texto, larguraMax, maxLinhas) {
+  const palavras = String(texto || "").split(/\s+/).filter(Boolean);
+  const linhas = [];
+  let linhaAtual = "";
+  palavras.forEach((palavra) => {
+    const tentativa = linhaAtual ? `${linhaAtual} ${palavra}` : palavra;
+    if (ctx.measureText(tentativa).width > larguraMax && linhaAtual) {
+      linhas.push(linhaAtual);
+      linhaAtual = palavra;
+    } else {
+      linhaAtual = tentativa;
+    }
+  });
+  if (linhaAtual) linhas.push(linhaAtual);
+  if (linhas.length === 0) return [""];
+
+  if (linhas.length > maxLinhas) {
+    const cortadas = linhas.slice(0, maxLinhas);
+    let ultima = cortadas[maxLinhas - 1];
+    while (ctx.measureText(ultima + "…").width > larguraMax && ultima.length > 1) {
+      ultima = ultima.slice(0, -1);
+    }
+    cortadas[maxLinhas - 1] = ultima + "…";
+    return cortadas;
+  }
+  return linhas;
+}
+
+// Carrega uma data URL como um objeto Image pronto pra desenhar no canvas.
+function carregarImageElement(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
+}
+
+// Imagem-modelo compartilhada pelo PDF e pelo PNG — molde novo (mesmo
+// padrão adotado no catálogo Impala em out/2026), formato A4 em resolução
+// maior que o molde antigo (1414x2000, era 1131x1600) e cabeçalho mais
+// enxuto, o que abre espaço pra uma 4ª fileira de cartões. Coordenadas em
+// pixels da própria imagem, marcando a área "em branco" onde os cartões
+// podem ser desenhados sem cobrir a moldura — vale pra qualquer template,
+// desde que sigam sempre esse mesmo molde (mesmo tamanho, mesmo espaço em
+// branco no mesmo lugar).
+const CAMINHO_TEMPLATE_PADRAO = "template-oferta.jpg";
+const TEMPLATE_LARGURA = 1414;
+const TEMPLATE_ALTURA = 2000;
+const TEMPLATE_AREA = { esq: 40, dir: 1368, topo: 140, base: 1965 };
+
+// Cada área pode ter o seu próprio template — útil se um dia esse
+// catálogo for negociado com outra empresa (ex: uma distribuidora
+// parceira), cadastrada como uma área nova, com a própria identidade
+// visual. Basta o arquivo existir em "templates/<nome da área>.jpg"
+// (só o Leonardo sobe esse arquivo, direto no repositório, seguindo o
+// mesmo molde/tamanho 1414x2000); áreas sem template próprio usam o
+// padrão (o da Atacado Martins).
+function caminhoTemplateDaArea(area) {
+  const nome = String(area || "").trim();
+  return nome ? `templates/${encodeURIComponent(nome)}.jpg` : CAMINHO_TEMPLATE_PADRAO;
+}
+async function carregarTemplateDaArea(area) {
+  const caminhoEspecifico = caminhoTemplateDaArea(area);
+  if (caminhoEspecifico !== CAMINHO_TEMPLATE_PADRAO) {
+    const imagemEspecifica = await carregarImageElement(caminhoEspecifico);
+    if (imagemEspecifica) return imagemEspecifica;
+  }
+  return carregarImageElement(CAMINHO_TEMPLATE_PADRAO);
+}
+
+// Foto do vendedor (redonda, anel dourado) desenhada do lado esquerdo do
+// cabeçalho, com o nome ao lado — mesmo padrão novo do Impala. A validade
+// continua do lado direito, igual já era.
+const VENDEDOR_FOTO_DIAMETRO = 100;
+const VENDEDOR_FOTO_Y_CENTRO = 80;
+const VENDEDOR_INDENT = 22;
+const TEMPLATE_TEXTO_TOPO = VENDEDOR_FOTO_Y_CENTRO + 10;
+// Respiro da validade em relação à borda da área útil (um "tabzinho" pra
+// não ficar colado, pedido pelo Leonardo).
+const TEMPLATE_TEXTO_INDENT = 22;
+
+// ---------- Grade da Imagem (PNG): tamanho calculado pelo conteúdo ----------
+// Em vez de dividir o espaço disponível em fileiras de altura fixa (o que
+// deixava sobra de espaço em branco embaixo de cada cartão), a altura do
+// cartão é calculada a partir do que ele realmente precisa (foto + nome +
+// código + etiqueta) — mesma lógica já usada no PDF. Isso permite caber 4
+// fileiras (16 itens) em vez de 3 (12), com a foto um pouco mais baixa que
+// larga (GRADE_FATOR_ALTURA_FOTO) em vez de quadrada.
+const GRADE_GAP_FOTO_NOME = 20;
+const GRADE_GAP_NOME_CODIGO = 16;
+const GRADE_GAP_CODIGO_BADGE = 14;
+const GRADE_LINHA_ALTURA_NOME = 18;
+const GRADE_MAX_LINHAS_NOME = 2;
+const GRADE_ALTURA_BADGE = 52;
+const GRADE_FATOR_ALTURA_FOTO = 0.93;
+// Mesma ideia, só que pro PDF (milímetros) — bem perto da proporção da
+// Imagem (0.93), ajustada pra caber as mesmas 4 fileiras (16 itens) por
+// página depois de igualar o espaço entre fileiras à mesma proporção da
+// Imagem (ver gutterV mais abaixo, na função do PDF).
+const PDF_FATOR_ALTURA_FOTO = 0.911;
+// A Imagem (PNG) é desenhada numa resolução 2x maior que o tamanho final
+// do molde (reduzida de volta ao exportar), só pra o texto ficar nítido —
+// o PDF é vetorial (sempre nítido), a Imagem é raster e precisa de mais
+// pixels reais.
+const PNG_ESCALA = 2;
+
+function calcularGradePng() {
+  const colunas = 4;
+  const gutterH = 30;
+  const gutterV = 22;
+  const padCard = 10;
+  const { esq: areaEsq, dir: areaDir, topo: areaTopo, base: areaBase } = TEMPLATE_AREA;
+  const larguraUtil = areaDir - areaEsq;
+  const alturaUtil = areaBase - areaTopo;
+  const larguraCard = (larguraUtil - gutterH * (colunas - 1)) / colunas;
+  const larguraFoto = larguraCard - 10 * 2;
+  const alturaImagem = larguraFoto * GRADE_FATOR_ALTURA_FOTO;
+
+  const alturaBlocoTexto =
+    GRADE_GAP_FOTO_NOME +
+    GRADE_MAX_LINHAS_NOME * GRADE_LINHA_ALTURA_NOME +
+    GRADE_GAP_NOME_CODIGO +
+    GRADE_GAP_CODIGO_BADGE;
+  const alturaCard = padCard + alturaImagem + alturaBlocoTexto + GRADE_ALTURA_BADGE + padCard;
+
+  const linhasGrade = Math.max(1, Math.floor((alturaUtil + gutterV) / (alturaCard + gutterV)));
+
+  return {
+    colunas, gutterH, gutterV, padCard, areaEsq, areaTopo, alturaUtil,
+    larguraCard, alturaCard, larguraFoto, alturaImagem,
+    linhasGrade, limite: colunas * linhasGrade,
+  };
+}
+
+// Quando o carrinho de itens marcados tem menos itens do que cabe na
+// grade, em vez de deixar a sobra toda embaixo (grade "grudada" no topo),
+// o espaço entre as fileiras fica sempre igual e o bloco inteiro é
+// centralizado verticalmente na área útil.
+function ajustarEspacamentoGradePng(grade, totalItens) {
+  const { colunas, gutterV, alturaCard, areaTopo, alturaUtil } = grade;
+  const linhasReais = Math.max(1, Math.ceil(totalItens / colunas));
+  const alturaBlocoGrade = linhasReais * alturaCard + (linhasReais - 1) * gutterV;
+  const areaTopoAjustada = areaTopo + Math.max(0, (alturaUtil - alturaBlocoGrade) / 2);
+  return { gutterV, areaTopo: areaTopoAjustada };
+}
+
+// Desenha a foto (redonda, anel dourado) + nome do vendedor no canvas do
+// PNG, do lado esquerdo do cabeçalho do molde.
+function desenharCabecalhoVendedorCanvas(ctx, imagemVendedor, nomeVendedor) {
+  const diam = VENDEDOR_FOTO_DIAMETRO;
+  const x = TEMPLATE_AREA.esq + VENDEDOR_INDENT;
+  const yCentro = VENDEDOR_FOTO_Y_CENTRO;
+  const y = yCentro - diam / 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x + diam / 2, yCentro, diam / 2, 0, Math.PI * 2);
+  ctx.closePath();
+  if (imagemVendedor) {
+    ctx.clip();
+    desenharImagemPreenchendo(ctx, imagemVendedor, x, y, diam, diam);
+  } else {
+    ctx.fillStyle = "#F4F3EE";
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = "#d4af37";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(x + diam / 2, yCentro, diam / 2, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  if (nomeVendedor) {
+    ctx.fillStyle = "#2A2925";
+    ctx.font = "600 15px 'Work Sans', sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(nomeVendedor, x + diam + 18, yCentro + 10);
+  }
+}
+
+// Desenha uma grade de cartões de produto sobre o template (usada pelo
+// PNG e, futuramente, pelo PDF): cartão branco com sombra suave, foto
+// quadrada cortada sem esticar, nome em Montserrat itálico e o preço
+// numa etiqueta preta com brilho dourado, sempre ancorada no rodapé do
+// cartão — não se move de acordo com o tamanho do nome do produto.
+function desenharGradeDeCartoes(ctx, itens, imagensCarregadas, opcoes) {
+  const {
+    colunas, areaEsq, areaTopo, larguraCard, alturaCard, gutterH, gutterV,
+    padCard, larguraFoto, alturaImagem, comSombra,
+  } = opcoes;
+
+  itens.forEach((item, indice) => {
+    const coluna = indice % colunas;
+    const linha = Math.floor(indice / colunas);
+    const x = areaEsq + coluna * (larguraCard + gutterH);
+    const y = areaTopo + linha * (alturaCard + gutterV);
+
+    // Cartão branco, sombra suave (dá referência de profundidade sobre o template)
+    ctx.save();
+    if (comSombra) {
+      ctx.shadowColor = "rgba(20,18,14,0.18)";
+      ctx.shadowBlur = 16;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 5;
+    }
+    ctx.fillStyle = "#FFFFFF";
+    desenharRetanguloArredondado(ctx, x, y, larguraCard, alturaCard, 14);
+    ctx.fill();
+    ctx.restore();
+
+    // Foto (corte "preencher", sem esticar) — ou um fundo neutro, se não tiver foto salva
+    const imagemItem = imagensCarregadas.get(item.codigo);
+    if (imagemItem) {
+      ctx.save();
+      desenharRetanguloArredondado(ctx, x + padCard, y + padCard, larguraFoto, alturaImagem, 8);
+      ctx.clip();
+      desenharImagemPreenchendo(ctx, imagemItem, x + padCard, y + padCard, larguraFoto, alturaImagem);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#F4F3EE";
+      desenharRetanguloArredondado(ctx, x + padCard, y + padCard, larguraFoto, alturaImagem, 8);
+      ctx.fill();
+    }
+
+    // Preço — ancorado no final do cartão, etiqueta preta + brilho dourado
+    // (o "R$" já aparece separado, então usa só o número aqui)
+    const precoTexto = formatarPrecoSemPrefixo(item.preco);
+    const alturaBadge = 52;
+    const larguraBadge = larguraFoto;
+    const xBadge = x + padCard;
+    const yBadge = y + alturaCard - padCard - alturaBadge;
+
+    // Título + código — calculados de baixo pra cima, colados no preço
+    // (o espaço "sobrando" fica entre a foto e o texto, não entre o texto e o preço)
+    ctx.font = "600 17.1px 'Work Sans', sans-serif";
+    const textoCodigos = item.codigo_barras
+      ? `${item.codigo}  •  Barras ${item.codigo_barras}`
+      : `${item.codigo}`;
+    const linhaCodigos = quebrarTextoCanvas(ctx, textoCodigos, larguraFoto, 1)[0];
+
+    ctx.font = "italic 900 19.7px 'Montserrat', sans-serif";
+    const linhasNome = quebrarTextoCanvas(ctx, item.descricao, larguraFoto, 2);
+
+    const gapCodigoBadge = 14;
+    const gapNomeCodigo = 16;
+    const linhaAlturaNome = 18;
+
+    const yCodigo = yBadge - gapCodigoBadge;
+    const yUltimaLinhaNome = yCodigo - gapNomeCodigo;
+    const yPrimeiraLinhaNome = yUltimaLinhaNome - (linhasNome.length - 1) * linhaAlturaNome;
+
+    ctx.fillStyle = "#1E1E1E";
+    ctx.font = "italic 900 19.7px 'Montserrat', sans-serif";
+    linhasNome.forEach((linha, li) => ctx.fillText(linha, x + padCard, yPrimeiraLinhaNome + li * linhaAlturaNome));
+
+    ctx.fillStyle = "#1E1E1E";
+    ctx.font = "600 17.1px 'Work Sans', sans-serif";
+    ctx.fillText(linhaCodigos, x + padCard, yCodigo);
+
+    ctx.save();
+    ctx.shadowColor = "rgba(246,178,27,0.5)";
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = "#161513";
+    desenharRetanguloArredondado(ctx, xBadge, yBadge, larguraBadge, alturaBadge, 10);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "700 15.7px 'Work Sans', sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("R$", xBadge + 11, yBadge + 16);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#D8D6CF";
+    ctx.fillText("unid", xBadge + larguraBadge - 11, yBadge + 16);
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "italic 900 35.6px 'Montserrat', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(precoTexto, x + larguraCard / 2, yBadge + alturaBadge - 14);
+    ctx.textAlign = "left";
+  });
+}
+
+document.getElementById("btn-gerar-png").addEventListener("click", async () => {
+  const itensMarcados = TODOS_ITENS.filter((i) => (QTY.get(i.codigo) || 0) > 0);
+  if (itensMarcados.length === 0) return;
+
+  // Mesma ordenação usada no PDF (categoria e depois descrição, alfabética),
+  // só que aqui numa grade só, sem títulos de categoria.
+  const itensOrdenados = agruparPorCategoriaOrdenado(itensMarcados).flatMap((g) => g.itens);
+
+  const grade = calcularGradePng();
+  if (itensOrdenados.length > grade.limite) {
+    alert(
+      `Pra gerar a imagem, marque no máximo ${grade.limite} itens por vez.\n\n` +
+      `Gera a imagem com esses, desmarca eles e marca os próximos.`
+    );
+    return;
+  }
+
+  const botao = document.getElementById("btn-gerar-png");
+  botao.disabled = true;
+
+  try {
+    const dataUrlsPorCodigo = new Map();
+    await Promise.all(
+      itensOrdenados
+        .filter((i) => i.foto_url)
+        .map(async (i) => {
+          const dataUrl = await carregarImagemComoDataUrl(i.foto_url);
+          if (dataUrl) dataUrlsPorCodigo.set(i.codigo, dataUrl);
+        })
+    );
+
+    const imagensCarregadas = new Map();
+    await Promise.all(
+      Array.from(dataUrlsPorCodigo.entries()).map(async ([codigo, dataUrl]) => {
+        const img = await carregarImageElement(dataUrl);
+        if (img) imagensCarregadas.set(codigo, img);
+      })
+    );
+
+    const imagemTemplate = await carregarTemplateDaArea(AREA_VENDEDOR);
+
+    const fotoVendedorDataUrl = VENDEDOR_FOTO_URL
+      ? await carregarImagemComoDataUrl(VENDEDOR_FOTO_URL)
+      : null;
+    const imagemVendedor = fotoVendedorDataUrl
+      ? await carregarImageElement(fotoVendedorDataUrl)
+      : null;
+
+    if (document.fonts && document.fonts.ready) {
+      try { await document.fonts.ready; } catch (erroFontes) { /* segue com a fonte padrão */ }
+    }
+
+    const {
+      colunas, gutterH, gutterV, padCard, areaEsq, areaTopo, alturaUtil,
+      larguraCard, alturaCard, larguraFoto, alturaImagem,
+    } = grade;
+    const areaDir = TEMPLATE_AREA.dir;
+    const yLinhaVendedor = TEMPLATE_TEXTO_TOPO;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = TEMPLATE_LARGURA * PNG_ESCALA;
+    canvas.height = TEMPLATE_ALTURA * PNG_ESCALA;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(PNG_ESCALA, PNG_ESCALA);
+
+    // Fundo: a imagem-modelo (ou um fundo branco liso, se ela não carregar)
+    if (imagemTemplate) {
+      ctx.drawImage(imagemTemplate, 0, 0, TEMPLATE_LARGURA, TEMPLATE_ALTURA);
+    } else {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, TEMPLATE_LARGURA, TEMPLATE_ALTURA);
+    }
+
+    // Vendedor (foto + nome, à esquerda) e período (à direita)
+    const nomeVendedor = (document.getElementById("nome-vendedor").textContent || "").trim();
+    const textoSemana = "";
+    desenharCabecalhoVendedorCanvas(ctx, imagemVendedor, nomeVendedor);
+    if (textoSemana) {
+      ctx.fillStyle = "#2A2925";
+      ctx.font = "600 15px 'Work Sans', sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(textoSemana, areaDir - TEMPLATE_TEXTO_INDENT, yLinhaVendedor);
+      ctx.textAlign = "left";
+    }
+
+    const { gutterV: gutterVAjustado, areaTopo: areaTopoAjustada } = ajustarEspacamentoGradePng(
+      { colunas, gutterV, alturaCard, areaTopo, alturaUtil },
+      itensOrdenados.length
+    );
+
+    desenharGradeDeCartoes(ctx, itensOrdenados, imagensCarregadas, {
+      colunas, areaEsq, areaTopo: areaTopoAjustada, larguraCard, alturaCard,
+      gutterH, gutterV: gutterVAjustado, padCard, larguraFoto, alturaImagem,
+      comSombra: true,
+    });
+
+    const dataArquivo = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.download = `material-escolar-${dataArquivo}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  } catch (erro) {
+    console.error("[Material Escolar] Erro ao gerar imagem:", erro);
+    alert("Não consegui gerar a imagem. Tenta de novo.");
+  } finally {
+    botao.disabled = false;
+  }
+});
+
+document.getElementById("btn-gerar-pdf").addEventListener("click", async () => {
+  const itensMarcados = TODOS_ITENS.filter((i) => (QTY.get(i.codigo) || 0) > 0);
+  if (itensMarcados.length === 0) return;
+
+  const botao = document.getElementById("btn-gerar-pdf");
+  const textoOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = "Gerando…";
+
+  try {
+    // Mesma ordenação usada na Imagem (categoria e depois descrição,
+    // alfabética), numa grade só, contínua, sem títulos de categoria
+    // (igual ao Impala — o pedido dentro de cada categoria continua
+    // agrupado, só não aparece mais o nome da categoria como título).
+    const itensOrdenados = agruparPorCategoriaOrdenado(itensMarcados).flatMap((g) => g.itens);
+
+    // Carrega as fotos dos itens que tiverem, em paralelo, antes de montar
+    // o PDF (os itens sem foto salva simplesmente não mostram imagem).
+    const dataUrlsPorCodigo = new Map();
+    await Promise.all(
+      itensOrdenados
+        .filter((i) => i.foto_url)
+        .map(async (i) => {
+          const dataUrl = await carregarImagemComoDataUrl(i.foto_url);
+          if (dataUrl) dataUrlsPorCodigo.set(i.codigo, dataUrl);
+        })
+    );
+    const imagensCarregadas = new Map();
+    await Promise.all(
+      Array.from(dataUrlsPorCodigo.entries()).map(async ([codigo, dataUrl]) => {
+        const img = await carregarImageElement(dataUrl);
+        if (img) imagensCarregadas.set(codigo, img);
+      })
+    );
+
+    // Imagem-modelo (mesma da Imagem, já escolhida pela área do vendedor) —
+    // convertida pra data URL, porque o jsPDF precisa de base64/URL pra
+    // inserir a imagem, não do elemento <img>.
+    const imagemTemplateEl = await carregarTemplateDaArea(AREA_VENDEDOR);
+    let templateDataUrl = null;
+    if (imagemTemplateEl) {
+      const canvasTemplate = document.createElement("canvas");
+      canvasTemplate.width = imagemTemplateEl.width;
+      canvasTemplate.height = imagemTemplateEl.height;
+      canvasTemplate.getContext("2d").drawImage(imagemTemplateEl, 0, 0);
+      templateDataUrl = canvasTemplate.toDataURL("image/jpeg", 0.92);
+    }
+
+    // Foto do vendedor + moldura dourada, prontas como uma imagem circular
+    // só (recortada aqui, porque o jsPDF não recorta imagem sozinho).
+    let fotoVendedorDataUrl = null;
+    if (VENDEDOR_FOTO_URL) {
+      const fotoVendedorUrlData = await carregarImagemComoDataUrl(VENDEDOR_FOTO_URL);
+      const imagemVendedorEl = fotoVendedorUrlData ? await carregarImageElement(fotoVendedorUrlData) : null;
+      if (imagemVendedorEl) {
+        const diamPx = 240;
+        const canvasFotoVendedor = document.createElement("canvas");
+        canvasFotoVendedor.width = diamPx;
+        canvasFotoVendedor.height = diamPx;
+        const ctxFotoVendedor = canvasFotoVendedor.getContext("2d");
+        ctxFotoVendedor.save();
+        ctxFotoVendedor.beginPath();
+        ctxFotoVendedor.arc(diamPx / 2, diamPx / 2, diamPx / 2, 0, Math.PI * 2);
+        ctxFotoVendedor.closePath();
+        ctxFotoVendedor.clip();
+        desenharImagemPreenchendo(ctxFotoVendedor, imagemVendedorEl, 0, 0, diamPx, diamPx);
+        ctxFotoVendedor.restore();
+        fotoVendedorDataUrl = canvasFotoVendedor.toDataURL("image/png");
+      }
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const larguraPagina = 210;
+    const alturaPagina = 297;
+
+    // Área "segura" da imagem-modelo (as mesmas medidas usadas na Imagem),
+    // convertida de pixels pra milímetros.
+    const escalaX = larguraPagina / TEMPLATE_LARGURA;
+    const escalaY = alturaPagina / TEMPLATE_ALTURA;
+    const areaEsq = TEMPLATE_AREA.esq * escalaX;
+    const areaDir = TEMPLATE_AREA.dir * escalaX;
+    const areaTopo = TEMPLATE_AREA.topo * escalaY;
+    const areaBase = TEMPLATE_AREA.base * escalaY;
+    const indentTexto = TEMPLATE_TEXTO_INDENT * escalaX;
+    const margemX = areaEsq;
+    const larguraUtil = areaDir - areaEsq;
+
+    // Desenha a imagem-modelo cobrindo a página inteira — chamada de novo
+    // a cada página nova (addPage não mantém o que já foi desenhado).
+    function desenharFundo() {
+      if (templateDataUrl) {
+        doc.addImage(templateDataUrl, "JPEG", 0, 0, larguraPagina, alturaPagina);
+      }
+    }
+
+    // Vendedor (foto + nome, esquerda) e período (direita) — desenhado só
+    // na primeira página (decisão do Leonardo: num PDF fica melhor assim,
+    // diferente da Imagem, que é uma folha única).
+    const diamVendedorMm = VENDEDOR_FOTO_DIAMETRO * escalaX;
+    const xFotoVendedor = (TEMPLATE_AREA.esq + VENDEDOR_INDENT) * escalaX;
+    const yCentroVendedorMm = VENDEDOR_FOTO_Y_CENTRO * escalaY;
+    const yFotoVendedor = yCentroVendedorMm - diamVendedorMm / 2;
+    const nomeVendedor = (document.getElementById("nome-vendedor").textContent || "").trim();
+    const textoSemana = "";
+
+    function desenharCabecalhoVendedor() {
+      if (fotoVendedorDataUrl) {
+        doc.addImage(fotoVendedorDataUrl, "PNG", xFotoVendedor, yFotoVendedor, diamVendedorMm, diamVendedorMm);
+      }
+      doc.setDrawColor(212, 175, 55);
+      doc.setLineWidth(0.6);
+      doc.circle(xFotoVendedor + diamVendedorMm / 2, yCentroVendedorMm, diamVendedorMm / 2, "S");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(42, 41, 37);
+      if (nomeVendedor) doc.text(nomeVendedor, xFotoVendedor + diamVendedorMm + 4, yCentroVendedorMm + 1.6);
+      if (textoSemana) doc.text(textoSemana, areaDir - indentTexto, yCentroVendedorMm + 1.6, { align: "right" });
+    }
+
+    desenharFundo();
+    desenharCabecalhoVendedor();
+
+    let y = areaTopo;
+
+    const colunas = 4;
+    const gutterH = 4;
+    const gutterV = 3.3;
+    const larguraCard = (larguraUtil - gutterH * (colunas - 1)) / colunas;
+    const padCard = 2.2;
+    const larguraFoto = larguraCard - padCard * 2;
+    // Foto um pouco mais baixa que larga (em vez de quadrada) — mesma
+    // regra da Imagem, é o que abre espaço pra 4ª fileira (16 itens por
+    // página em vez de 12).
+    const alturaFoto = larguraFoto * PDF_FATOR_ALTURA_FOTO;
+    const alturaBadge = 9.6;
+    const alturaTextos = 12.5; // nome (até 2 linhas) + código, entre a foto e a etiqueta
+    const alturaCard = padCard + alturaFoto + alturaTextos + alturaBadge + padCard;
+
+    // Recorta cada foto (sem esticar) já no formato final (largura x
+    // altura, não mais um quadrado) — mesma lógica de corte usada na
+    // Imagem (desenharImagemPreenchendo), só que desenhando num canvas à
+    // parte em vez de direto no PDF (o jsPDF não recorta imagem sozinho).
+    const larguraFotoPx = Math.round(larguraFoto * (300 / 25.4)); // ~300dpi
+    const alturaFotoPx = Math.round(alturaFoto * (300 / 25.4));
+    const fotosRecortadas = new Map();
+    imagensCarregadas.forEach((img, codigo) => {
+      const canvasFoto = document.createElement("canvas");
+      canvasFoto.width = larguraFotoPx;
+      canvasFoto.height = alturaFotoPx;
+      desenharImagemPreenchendo(canvasFoto.getContext("2d"), img, 0, 0, larguraFotoPx, alturaFotoPx);
+      fotosRecortadas.set(codigo, canvasFoto.toDataURL("image/jpeg", 0.9));
+    });
+
+    // Grade contínua, sem separar por categoria — igual já é feito na
+    // Imagem (o pedido dentro de cada categoria continua agrupado, só não
+    // aparece mais o nome da categoria como título entre os grupos).
+    let coluna = 0;
+    itensOrdenados.forEach((item) => {
+      if (coluna === 0 && y + alturaCard > areaBase) {
+        doc.addPage();
+        desenharFundo();
+        y = areaTopo;
+      }
+
+      const x = margemX + coluna * (larguraCard + gutterH);
+
+      // Cartão branco com borda leve (sem sombra — o jsPDF não faz blur)
+      doc.setDrawColor(225, 224, 218);
+      doc.setFillColor(255, 255, 255);
+      doc.setLineWidth(0.2);
+      doc.roundedRect(x, y, larguraCard, alturaCard, 1.8, 1.8, "FD");
+
+      // Foto (recorte já pronto, sem esticar) ou fundo neutro
+      const fotoDataUrl = fotosRecortadas.get(item.codigo);
+      if (fotoDataUrl) {
+        try {
+          doc.addImage(fotoDataUrl, "JPEG", x + padCard, y + padCard, larguraFoto, alturaFoto);
+        } catch (erro) {
+          console.error("[Material Escolar] Erro ao inserir imagem no PDF:", erro);
+        }
+      } else {
+        doc.setFillColor(244, 243, 238);
+        doc.rect(x + padCard, y + padCard, larguraFoto, alturaFoto, "F");
+      }
+
+      // Preço — etiqueta preta ancorada no rodapé do cartão (não se
+      // move de acordo com o tamanho do nome do produto). O "R$" já
+      // aparece separado, então usa só o número aqui.
+      const precoTexto = formatarPrecoSemPrefixo(item.preco);
+      const larguraBadge = larguraFoto;
+      const xBadge = x + padCard;
+      const yBadge = y + alturaCard - padCard - alturaBadge;
+
+      // Nome + código, calculados de baixo pra cima, colados na etiqueta
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.2);
+      const textoCodigos = item.codigo_barras
+        ? `${item.codigo}  •  Barras ${item.codigo_barras}`
+        : `${item.codigo}`;
+      const linhaCodigos = doc.splitTextToSize(textoCodigos, larguraFoto)[0];
+
+      doc.setFont("helvetica", "bolditalic");
+      doc.setFontSize(8.3);
+      const todasLinhasNome = doc.splitTextToSize(item.descricao, larguraFoto);
+      const linhasNome = todasLinhasNome.slice(0, 2);
+      if (todasLinhasNome.length > 2 && linhasNome[1].length > 1) {
+        linhasNome[1] = linhasNome[1].slice(0, -1) + "…";
+      }
+
+      const gapCodigoBadge = 2.6;
+      const gapNomeCodigo = 3.4;
+      const linhaAlturaNome = 3.4;
+
+      const yCodigo = yBadge - gapCodigoBadge;
+      const yUltimaLinhaNome = yCodigo - gapNomeCodigo;
+      const yPrimeiraLinhaNome = yUltimaLinhaNome - (linhasNome.length - 1) * linhaAlturaNome;
+
+      doc.setTextColor(30, 30, 30);
+      doc.setFont("helvetica", "bolditalic");
+      doc.setFontSize(8.3);
+      linhasNome.forEach((linha, li) => doc.text(linha, x + padCard, yPrimeiraLinhaNome + li * linhaAlturaNome));
+
+      doc.setTextColor(30, 30, 30);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.2);
+      doc.text(linhaCodigos, x + padCard, yCodigo);
+
+      doc.setFillColor(22, 21, 19);
+      doc.roundedRect(xBadge, yBadge, larguraBadge, alturaBadge, 1.6, 1.6, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.6);
+      doc.setTextColor(255, 255, 255);
+      doc.text("R$", xBadge + 2, yBadge + 3.4);
+      doc.setTextColor(216, 214, 207);
+      doc.text("unid", xBadge + larguraBadge - 2, yBadge + 3.4, { align: "right" });
+
+      doc.setFont("helvetica", "bolditalic");
+      doc.setFontSize(15);
+      doc.setTextColor(255, 255, 255);
+      doc.text(precoTexto, x + larguraCard / 2, yBadge + alturaBadge - 3, { align: "center" });
+
+      coluna++;
+      if (coluna === colunas) {
+        coluna = 0;
+        y += alturaCard + gutterV;
+      }
+    });
+
+    const dataArquivo = new Date().toISOString().slice(0, 10);
+    doc.save(`material-escolar-${dataArquivo}.pdf`);
+  } catch (erro) {
+    console.error("[Material Escolar] Erro ao gerar PDF:", erro);
+    alert("Não consegui gerar o PDF. Tenta de novo.");
+  } finally {
+    botao.disabled = false;
+    botao.textContent = textoOriginal;
+  }
+});
+
+document.getElementById("btn-enviar-interesse").addEventListener("click", () => {
+  const itensMarcados = TODOS_ITENS.filter((i) => (QTY.get(i.codigo) || 0) > 0);
+  if (itensMarcados.length === 0 || !VENDEDOR_WHATSAPP) return;
+
+  // Agrupa por categoria (não pela ordem que o cliente foi marcando) e
+  // ordena tanto as categorias quanto os itens dentro de cada uma em
+  // ordem alfabética.
+  const porCategoria = new Map();
+  itensMarcados.forEach((item) => {
+    if (!porCategoria.has(item.categoria)) porCategoria.set(item.categoria, []);
+    porCategoria.get(item.categoria).push(item);
+  });
+
+  const categoriasOrdenadas = Array.from(porCategoria.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const blocos = categoriasOrdenadas.map((categoria) => {
+    const itensDaCategoria = porCategoria.get(categoria).sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+    const linhas = itensDaCategoria.map((i) => `Cód: ${i.codigo} | Qtd: ${QTY.get(i.codigo)}`);
+    return `- *${categoria.toUpperCase()}*\n${linhas.join("\n")}`;
+  });
+
+  const mensagem =
+    `*MATERIAL ESCOLAR*\n` +
+    `_Olá! tenho interesse nestes itens:_\n\n` +
+    blocos.join("\n\n") +
+    `\n\n_(Vamos negociar esses itens!)_`;
+
+  const url = `https://wa.me/${VENDEDOR_WHATSAPP}?text=${encodeURIComponent(mensagem)}`;
+  window.open(url, "_blank");
+});
+
+// "Gerar PDF do pré-pedido" — cópia simples (só texto, sem molde/fotos) dos
+// mesmos itens marcados que já vão pro WhatsApp, com código, quantidade e
+// preço de cada um. Serve de backup pra quando o cliente não consegue usar
+// o WhatsApp Web no computador dele, mas ainda quer baixar/mandar um PDF
+// com os itens de interesse.
+document.getElementById("btn-pdf-pedido").addEventListener("click", () => {
+  const itensMarcados = TODOS_ITENS.filter((i) => (QTY.get(i.codigo) || 0) > 0);
+  if (itensMarcados.length === 0) return;
+
+  const botao = document.getElementById("btn-pdf-pedido");
+  botao.disabled = true;
+
+  try {
+    const grupos = agruparPorCategoriaOrdenado(itensMarcados);
+
+    const nomeVendedor = (document.getElementById("nome-vendedor").textContent || "").trim();
+    const textoSemana = "";
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const margemX = 18;
+    const larguraPagina = 210;
+    const larguraUtil = larguraPagina - margemX * 2;
+    const areaBase = 280;
+    let y = 20;
+
+    function novaPaginaSeNecessario(alturaNecessaria) {
+      if (y + alturaNecessaria > areaBase) {
+        doc.addPage();
+        y = 20;
+      }
+    }
+
+    doc.setFont("helvetica", "bolditalic");
+    doc.setFontSize(18);
+    doc.setTextColor(30, 79, 163);
+    doc.text("Pré-pedido — Material Escolar", margemX, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(90, 90, 90);
+    const dataTexto = new Date().toLocaleDateString("pt-BR");
+    doc.text(`Vendedor: ${nomeVendedor || "-"}   •   Data: ${dataTexto}`, margemX, y);
+    y += 6;
+    if (textoSemana) {
+      doc.text(textoSemana, margemX, y);
+      y += 6;
+    }
+    y += 5;
+
+    grupos.forEach((grupo) => {
+      novaPaginaSeNecessario(14);
+
+      doc.setFont("helvetica", "bolditalic");
+      doc.setFontSize(12);
+      doc.setTextColor(23, 62, 130);
+      doc.text(grupo.categoria.toUpperCase(), margemX, y);
+      y += 2.5;
+
+      doc.setDrawColor(220, 228, 242);
+      doc.setLineWidth(0.3);
+      doc.line(margemX, y, margemX + larguraUtil, y);
+      y += 6.5;
+
+      grupo.itens.forEach((item) => {
+        novaPaginaSeNecessario(9);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(40, 40, 40);
+        const descricaoLinha = doc.splitTextToSize(item.descricao, larguraUtil * 0.62)[0];
+        doc.text(descricaoLinha, margemX, y);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(130, 130, 130);
+        doc.text(`Cód. ${item.codigo}${item.codigo_barras ? `  •  Barras ${item.codigo_barras}` : ""}  •  Qtd: ${QTY.get(item.codigo)}`, margemX, y + 4.4);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10.5);
+        doc.setTextColor(30, 79, 163);
+        doc.text(formatarPreco(item.preco), margemX + larguraUtil, y, { align: "right" });
+
+        y += 9.5;
+      });
+
+      y += 3.5;
+    });
+
+    novaPaginaSeNecessario(10);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8.5);
+    doc.setTextColor(140, 140, 140);
+    doc.text("Preços sujeitos a confirmação — o pedido é combinado direto com o vendedor.", margemX, y);
+
+    const dataArquivo = new Date().toISOString().slice(0, 10);
+    doc.save(`pre-pedido-material-escolar-${dataArquivo}.pdf`);
+  } catch (erro) {
+    console.error("[Material Escolar] Erro ao gerar PDF do pedido:", erro);
+    alert("Não consegui gerar o PDF. Tenta de novo.");
+  } finally {
+    botao.disabled = false;
+  }
+});
+
+// ---------------- BOOT ----------------
+async function iniciar() {
+  const slug = pegarSlugDaUrl();
+  if (!slug) {
+    mostrarEstado("tela-erro");
+    return;
+  }
+
+  registrarVisita(slug);
+
+  let vendedor;
+  try {
+    vendedor = await buscarVendedor(slug);
+  } catch (erro) {
+    console.error("[Material Escolar] Erro ao buscar vendedor:", erro);
+    mostrarEstado("tela-erro");
+    return;
+  }
+
+  if (!vendedor) {
+    mostrarEstado("tela-erro");
+    return;
+  }
+
+  if (!vendedor.ativo) {
+    const texto = encodeURIComponent("Olá! Meu catálogo de Material Escolar está pausado, gostaria de regularizar o acesso.");
+    document.getElementById("btn-pausado-whatsapp").href = `https://wa.me/${PLATAFORMA.whatsapp}?text=${texto}`;
+    mostrarEstado("tela-pausado");
+    return;
+  }
+
+  VENDEDOR_WHATSAPP = vendedor.whatsapp;
+  AREA_VENDEDOR = vendedor.area || "SC";
+  VENDEDOR_FOTO_URL = vendedor.foto_url || null;
+  document.getElementById("nome-vendedor").textContent = vendedor.nome;
+
+  const fotoEl = document.getElementById("foto-vendedor");
+  if (vendedor.foto_url) {
+    fotoEl.style.backgroundImage = `url(${vendedor.foto_url})`;
+    fotoEl.textContent = "";
+  } else {
+    fotoEl.textContent = iniciaisDoNome(vendedor.nome);
+  }
+
+  let itens;
+  try {
+    itens = await buscarItensEscolar(vendedor.area || "SC");
+  } catch (erro) {
+    console.error("[Material Escolar] Erro ao buscar itens:", erro);
+    mostrarEstado("tela-erro");
+    return;
+  }
+
+  if (!itens || itens.length === 0) {
+    mostrarEstado("tela-vazio");
+    return;
+  }
+
+  TODOS_ITENS = itens;
+  document.getElementById("texto-semana").textContent = `${itens.length} itens`;
+
+  renderizarAbas();
+  renderizarItens();
+  atualizarRodape();
+  mostrarEstado("app");
+}
+
+function iniciaisDoNome(nome) {
+  return (nome || "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
+}
+
+function escapeHtml(texto) {
+  return String(texto || "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+function escapeAttr(texto) {
+  return escapeHtml(texto);
+}
+
+document.addEventListener("DOMContentLoaded", iniciar);

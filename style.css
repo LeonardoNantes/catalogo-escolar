@@ -1,0 +1,294 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+
+body {
+  font-family: 'Work Sans', system-ui, sans-serif;
+  background: #F6F8FC;
+  color: #201F1C;
+}
+h1, h2, h3 { font-family: 'Space Grotesk', system-ui, sans-serif; }
+button { font-family: inherit; cursor: pointer; }
+
+/* ---------- ESTADOS (carregando / erro / pausado / vazio) ---------- */
+.tela-estado {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 24px;
+  gap: 14px;
+}
+.tela-estado h1 { font-size: 20px; color: #1E4FA3; }
+.tela-estado p { font-size: 14px; color: #5E5D59; max-width: 320px; line-height: 1.5; }
+.spinner {
+  width: 32px; height: 32px;
+  border: 3px solid #E3EBF8;
+  border-top-color: #1E4FA3;
+  border-radius: 50%;
+  animation: girar 0.8s linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+
+.botao-principal {
+  display: inline-block;
+  padding: 13px 22px;
+  border: none;
+  border-radius: 14px;
+  background: #1E4FA3;
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(30,79,163,0.25);
+}
+
+/* ---------- BLOCO FIXO (cabeçalho + faixa + abas) ---------- */
+.topo-fixo {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #F6F8FC;
+}
+
+/* ---------- CABEÇALHO ---------- */
+.cabecalho {
+  padding: 9px 20px 8px;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 1px 0 rgba(31,30,29,0.06);
+}
+.linha-vendedor { display: flex; align-items: center; gap: 10px; }
+.foto-vendedor {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1E4FA3, #173E82);
+  color: #F6F8FC;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700; font-size: 15px;
+  flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 2px 6px rgba(30,79,163,0.3), 0 0 0 3px #FFFFFF, 0 0 0 4px rgba(30,79,163,0.14);
+}
+.dados-vendedor { display: flex; flex-direction: column; gap: 1px; flex-grow: 1; min-width: 0; }
+.nome-vendedor { font-weight: 600; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frase-vendedor { font-size: 11px; font-style: italic; color: #5E5D59; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- BANNER SEMANA ---------- */
+.banner-semana {
+  background: linear-gradient(135deg, #1E4FA3 0%, #173E82 100%);
+  border-bottom: 3px solid #F7B500;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 20px;
+  box-shadow: 0 4px 14px rgba(30,79,163,0.28);
+  position: relative;
+  z-index: 1;
+}
+.banner-titulo {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 800;
+  font-size: 16.5px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.banner-datas {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.92;
+  white-space: nowrap;
+}
+
+/* ---------- ABAS DE CATEGORIA ---------- */
+.categoria-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 9px 20px;
+  overflow-x: auto;
+  background: #F6F8FC;
+}
+.categoria-tab {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: 100px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: 1px solid rgba(31,30,29,0.16);
+  background: #FFFFFF;
+  color: #3D3D3A;
+  white-space: nowrap;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.categoria-tab.ativa {
+  background: linear-gradient(135deg, #1E4FA3, #173E82);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 3px 10px rgba(30,79,163,0.35);
+}
+
+/* ---------- LISTA DE ITENS ---------- */
+.lista-itens {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 20px 24px;
+  background-image: radial-gradient(circle, rgba(30,79,163,0.07) 1px, transparent 1px);
+  background-size: 16px 16px;
+  min-height: 200px;
+}
+.sem-itens {
+  text-align: center;
+  color: #5E5D59;
+  padding: 30px 0;
+  font-size: 14px;
+}
+
+.item-card {
+  border-radius: 18px;
+  border: 0.5px solid rgba(31,30,29,0.05);
+  padding: 14px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  box-shadow: 0 2px 10px rgba(32,31,28,0.07);
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+.item-card:active { transform: scale(0.995); }
+.item-icone {
+  width: 60px; height: 60px;
+  border-radius: 14px;
+  background-color: #FFFFFF;
+  background-size: cover;
+  background-position: center;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(32,31,28,0.10), inset 0 0 0 1px rgba(32,31,28,0.04);
+}
+.item-corpo { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.item-descricao { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.item-codigos { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: #5E5D59; flex-wrap: nowrap; overflow: hidden; }
+.item-codigos span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-codigos .divisor { width: 1px; height: 10px; background: rgba(31,30,29,0.2); flex-shrink: 0; }
+
+.item-acao-linha { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.item-preco {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700; font-size: 15px;
+  color: #F6F8FC; background: linear-gradient(135deg, #2A2925, #171613);
+  padding: 5px 11px; border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(23,22,19,0.25);
+}
+.item-interesse-pill {
+  padding: 6px 12px;
+  border-radius: 100px;
+  font-size: 12px; font-weight: 600;
+  border: 1.5px solid #1E4FA3;
+  background: #FFFFFF; color: #1E4FA3;
+  white-space: nowrap;
+  transition: box-shadow 0.15s;
+}
+.item-interesse-pill:active { box-shadow: 0 2px 8px rgba(30,79,163,0.25); }
+.item-qty {
+  display: flex; align-items: center; gap: 8px;
+  background: #F0EEE6; border-radius: 100px; padding: 3px;
+  box-shadow: inset 0 1px 2px rgba(32,31,28,0.06);
+}
+.item-qty button {
+  width: 26px; height: 26px; border-radius: 50%; border: none;
+  font-size: 15px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+.item-qty .btn-dec { background: #FFFFFF; color: #201F1C; box-shadow: 0 1px 3px rgba(32,31,28,0.12); }
+.item-qty .btn-inc { background: linear-gradient(135deg, #1E4FA3, #173E82); color: #FFFFFF; box-shadow: 0 2px 6px rgba(30,79,163,0.35); }
+.item-qty .qty-valor { min-width: 14px; text-align: center; font-weight: 700; font-size: 13px; }
+
+/* ---------- RODAPÉ ---------- */
+.rodape {
+  position: sticky; bottom: 0;
+  padding: 14px 20px 18px;
+  background: #FFFFFF;
+  border-top: 0.5px solid rgba(31,30,29,0.12);
+  box-shadow: 0 -6px 20px rgba(32,31,28,0.06);
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+.rodape .botao-principal {
+  flex: 1;
+  min-width: 0;
+  padding: 15px 10px; border-radius: 14px; font-size: 14px; border: none;
+  background: linear-gradient(135deg, #1E4FA3, #173E82);
+  box-shadow: 0 6px 18px rgba(30,79,163,0.3);
+  transition: box-shadow 0.15s, transform 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rodape .botao-principal:active { transform: scale(0.98); }
+.rodape .botao-principal:disabled { background: #F0EEE6; color: #6B6A62; cursor: default; box-shadow: none; }
+
+.botao-pre-pedido {
+  flex-shrink: 0;
+  width: 54px;
+  border-radius: 14px;
+  border: 1.5px solid rgba(30,79,163,0.3);
+  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+.botao-pre-pedido:active { transform: scale(0.95); }
+.botao-pre-pedido:disabled { border-color: rgba(31,30,29,0.12); cursor: default; }
+.botao-pre-pedido:disabled svg { stroke: #B7B5AC; }
+
+.botao-pdf {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: #E3EBF8;
+  border: none;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(30,79,163,0.18);
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+.botao-pdf:active { transform: scale(0.95); }
+.botao-pdf:disabled { background: #F0EEE6; cursor: default; box-shadow: none; }
+.botao-pdf:disabled svg { stroke: #B7B5AC; }
+.rodape-aviso { text-align: center; font-size: 11px; color: #5E5D59; margin-top: 8px; }
+
+@media (max-width: 380px) {
+  .item-card { flex-wrap: wrap; }
+}
+
+/* ---------- CÓDIGO DE BARRAS em destaque (Material Escolar) ---------- */
+.item-barras {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #201F1C;
+  background: #FFFFFF;
+  border: 1px solid rgba(31,30,29,0.12);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.item-barras svg { color: #1E4FA3; flex-shrink: 0; }
