@@ -56,12 +56,13 @@ function pegarSlugDaUrl() {
   return new URLSearchParams(window.location.search).get("v");
 }
 
-// Grava uma linha toda vez que o link é aberto — é o que permite o
+// Grava uma linha toda vez que o link é aberto (mesma tabela de todos os
+// catálogos — é dela que o Painel de Vendedores tira a tela de acessos) — é o que permite o
 // Leonardo ver depois quais vendedores usam mais essa ferramenta. Não
 // trava a navegação se falhar.
 async function registrarVisita(slug) {
   try {
-    await getClient().from("escolar_visualizacoes").insert({ vendedor_slug: slug });
+    await getClient().from("ofertas_visualizacoes").insert({ vendedor_slug: slug });
   } catch (erro) {
     console.error("[Material Escolar] Não consegui registrar a visita:", erro);
   }
