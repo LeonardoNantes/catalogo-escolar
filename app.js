@@ -295,10 +295,10 @@ function renderizarItens() {
           <div class="item-icone"${item.foto_url ? ` style="background-image:url('${escapeAttr(item.foto_url)}')"` : ""}>${item.foto_url ? "" : iconeCategoria(item.categoria, info.fg)}</div>
           <div class="item-corpo">
             <div class="item-descricao">${escapeHtml(item.descricao)}</div>
-            <div class="item-codigos">
-              <span>Cód. ${escapeHtml(item.codigo)}</span>
+            <div class="item-codigos-linha">
+              <span class="item-cod">Cód. ${escapeHtml(item.codigo)}</span>
+              ${item.codigo_barras ? `<div class="item-barras"><svg width="14" height="11" viewBox="0 0 14 11" aria-hidden="true"><path d="M0 0h1v11H0zM2 0h2v11H2zM5 0h1v11H5zM7 0h1v11H7zM9 0h2v11H9zM12 0h2v11h-2z" fill="currentColor"/></svg><span>${escapeHtml(item.codigo_barras)}</span></div>` : ""}
             </div>
-            ${item.codigo_barras ? `<div class="item-barras"><svg width="14" height="11" viewBox="0 0 14 11" aria-hidden="true"><path d="M0 0h1v11H0zM2 0h2v11H2zM5 0h1v11H5zM7 0h1v11H7zM9 0h2v11H9zM12 0h2v11h-2z" fill="currentColor"/></svg><span>${escapeHtml(item.codigo_barras)}</span></div>` : ""}
             <div class="item-acao-linha">
               <div class="item-preco">${formatarPreco(item.preco)}</div>
               ${interessado
