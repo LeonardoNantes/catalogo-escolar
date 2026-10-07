@@ -469,10 +469,10 @@ function carregarImageElement(dataUrl) {
 // podem ser desenhados sem cobrir a moldura — vale pra qualquer template,
 // desde que sigam sempre esse mesmo molde (mesmo tamanho, mesmo espaço em
 // branco no mesmo lugar).
-const CAMINHO_TEMPLATE_PADRAO = "template-oferta.jpg";
+const CAMINHO_TEMPLATE_PADRAO = "template-escolar.jpg"; // molde do Material Escolar (1414x2000)
 const TEMPLATE_LARGURA = 1414;
 const TEMPLATE_ALTURA = 2000;
-const TEMPLATE_AREA = { esq: 40, dir: 1368, topo: 140, base: 1965 };
+const TEMPLATE_AREA = { esq: 40, dir: 1368, topo: 140, base: 1960 }; // área branca do molde escolar: x 35–1372, y 29–1970; logo termina em y 140
 
 // Cada área pode ter o seu próprio template — útil se um dia esse
 // catálogo for negociado com outra empresa (ex: uma distribuidora
@@ -498,7 +498,7 @@ async function carregarTemplateDaArea(area) {
 // cabeçalho, com o nome ao lado — mesmo padrão novo do Impala. A validade
 // continua do lado direito, igual já era.
 const VENDEDOR_FOTO_DIAMETRO = 100;
-const VENDEDOR_FOTO_Y_CENTRO = 80;
+const VENDEDOR_FOTO_Y_CENTRO = 86; // um pouco mais baixo que no Ofertas pra o anel dourado não encostar na borda de cima do molde
 const VENDEDOR_INDENT = 22;
 const TEMPLATE_TEXTO_TOPO = VENDEDOR_FOTO_Y_CENTRO + 10;
 // Respiro da validade em relação à borda da área útil (um "tabzinho" pra
