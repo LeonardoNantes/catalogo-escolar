@@ -338,3 +338,28 @@ button { font-family: inherit; cursor: pointer; }
 /* Código Martins e código de barras na mesma linha (desce sozinho em tela muito estreita) */
 .item-codigos-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .item-cod { font-size: 10.5px; color: #5E5D59; white-space: nowrap; }
+
+/* ---------- BOTÃO LIMPAR + CAIXA DE PERGUNTA ---------- */
+.botao-limpar { border-color: rgba(176,52,90,0.3); }
+.botao-limpar:disabled svg { stroke: #B7B5AC; }
+.dialogo-fundo {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(20,20,30,0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.dialogo-caixa {
+  background: #FFFFFF;
+  border-radius: 18px;
+  padding: 22px 20px 18px;
+  max-width: 340px; width: 100%;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+}
+.dialogo-caixa p { font-size: 15px; line-height: 1.45; color: #201F1C; margin-bottom: 18px; }
+.dialogo-botoes { display: flex; gap: 10px; }
+.dialogo-botoes button {
+  flex: 1; padding: 12px 8px; border-radius: 12px;
+  font-size: 14px; font-weight: 700; border: none;
+}
+.dialogo-nao { background: #F0EEE6; color: #3D3D3A; }
+.dialogo-sim { background: linear-gradient(135deg, #1E4FA3, #173E82); color: #FFFFFF; }

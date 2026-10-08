@@ -148,22 +148,141 @@ let VENDEDOR_WHATSAPP = null;
 let AREA_VENDEDOR = "SC";
 let VENDEDOR_FOTO_URL = null;
 
-function inc(codigo) {
-  QTY.set(codigo, (QTY.get(codigo) || 0) + 1);
+// ---------------- ITENS MARCADOS GUARDADOS NO CELULAR ----------------
+// Os itens de interesse ficam guardados no próprio navegador do cliente
+// (um "cantinho" por vendedor), pra não sumirem se a página recarregar ou
+// se ele sair pra atender uma ligação e voltar. Guarda só código +
+// quantidade — o preço sempre vem atualizado do banco, e item que saiu do
+// catálogo é ignorado ao carregar. Não expira sozinho (decisão do
+// Leonardo): fica até o cliente limpar.
+// Depois de tocar em "Enviar interesse", marca a hora do envio; quando o
+// cliente volta pra página, pergunta se já enviou e se quer limpar.
+let CHAVE_GUARDADOS = null; // definida no iniciar(), por vendedor
+let ENVIADO_EM = null;      // hora do último "Enviar interesse" (ou null)
+
+function salvarItensMarcados() {
+  if (!CHAVE_GUARDADOS) return;
+  try {
+    const itens = {};
+    QTY.forEach((q, codigo) => { if (q > 0) itens[codigo] = q; });
+    if (Object.keys(itens).length === 0) {
+      localStorage.removeItem(CHAVE_GUARDADOS);
+      ENVIADO_EM = null;
+      return;
+    }
+    localStorage.setItem(CHAVE_GUARDADOS, JSON.stringify({ itens, enviadoEm: ENVIADO_EM }));
+  } catch (erro) {
+    // Navegador sem espaço/privado: segue funcionando, só não guarda.
+  }
+}
+
+function carregarItensMarcados() {
+  if (!CHAVE_GUARDADOS) return;
+  try {
+    const salvo = JSON.parse(localStorage.getItem(CHAVE_GUARDADOS) || "null");
+    if (!salvo || !salvo.itens) return;
+    const codigosNoCatalogo = new Set(TODOS_ITENS.map((i) => String(i.codigo)));
+    Object.entries(salvo.itens).forEach(([codigo, q]) => {
+      const qtd = Math.floor(Number(q));
+      if (codigosNoCatalogo.has(codigo) && qtd > 0) QTY.set(codigo, qtd);
+    });
+    ENVIADO_EM = salvo.enviadoEm || null;
+    salvarItensMarcados(); // limpa do guardado o que saiu do catálogo
+  } catch (erro) {
+    // Guardado corrompido: ignora e começa do zero.
+  }
+}
+
+function totalItensMarcados() {
+  return Array.from(QTY.values()).filter((q) => q > 0).length;
+}
+
+// Qualquer mudança nos itens marcados depois de um envio quer dizer que o
+// cliente continuou montando — a pergunta "já enviou?" deixa de fazer sentido.
+function aposMudarItens() {
+  ENVIADO_EM = null;
+  salvarItensMarcados();
   renderizarItens();
   atualizarRodape();
 }
+
+function inc(codigo) {
+  QTY.set(codigo, (QTY.get(codigo) || 0) + 1);
+  aposMudarItens();
+}
 function dec(codigo) {
   QTY.set(codigo, Math.max(0, (QTY.get(codigo) || 0) - 1));
-  renderizarItens();
-  atualizarRodape();
+  aposMudarItens();
 }
 function toggleInteresse(codigo) {
   const atual = QTY.get(codigo) || 0;
   QTY.set(codigo, atual > 0 ? 0 : 1);
-  renderizarItens();
-  atualizarRodape();
+  aposMudarItens();
 }
+
+function limparItensMarcados() {
+  QTY.clear();
+  aposMudarItens();
+}
+
+// Caixinha de pergunta da própria página (no lugar do confirm() do
+// navegador, que no celular fica feio e às vezes é bloqueado).
+function perguntar(texto, rotuloSim, rotuloNao) {
+  return new Promise((resolve) => {
+    const fundo = document.getElementById("dialogo-fundo");
+    document.getElementById("dialogo-texto").textContent = texto;
+    const sim = document.getElementById("dialogo-sim");
+    const nao = document.getElementById("dialogo-nao");
+    sim.textContent = rotuloSim;
+    nao.textContent = rotuloNao;
+    fundo.hidden = false;
+    const fechar = (resposta) => {
+      fundo.hidden = true;
+      sim.onclick = null;
+      nao.onclick = null;
+      resolve(resposta);
+    };
+    sim.onclick = () => fechar(true);
+    nao.onclick = () => fechar(false);
+  });
+}
+
+document.getElementById("btn-limpar-itens").addEventListener("click", async () => {
+  const total = totalItensMarcados();
+  if (total === 0) return;
+  const ok = await perguntar(
+    `Desmarcar ${total === 1 ? "o item marcado" : `todos os ${total} itens marcados`}?`,
+    "Sim, desmarcar",
+    "Cancelar"
+  );
+  if (ok) limparItensMarcados();
+});
+
+// Quando o cliente volta pra página depois de ter tocado em "Enviar
+// interesse" (voltou do WhatsApp, ou abriu o link de novo), pergunta se já
+// enviou. Espera alguns segundos depois do envio pra não perguntar na hora
+// em que o WhatsApp ainda está abrindo.
+let PERGUNTA_ENVIO_ABERTA = false;
+async function perguntarSeJaEnviou() {
+  if (!ENVIADO_EM || PERGUNTA_ENVIO_ABERTA || totalItensMarcados() === 0) return;
+  if (Date.now() - ENVIADO_EM < 4000) return;
+  PERGUNTA_ENVIO_ABERTA = true;
+  const limpar = await perguntar(
+    "Você já enviou esses itens pelo WhatsApp? Quer limpar a seleção pra começar de novo?",
+    "Sim, limpar",
+    "Não, manter"
+  );
+  PERGUNTA_ENVIO_ABERTA = false;
+  if (limpar) {
+    limparItensMarcados();
+  } else {
+    ENVIADO_EM = null;
+    salvarItensMarcados();
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") perguntarSeJaEnviou();
+});
 
 // Desliza a barra de abas sozinha pra deixar a aba escolhida no meio da
 // tela — assim as próximas categorias aparecem sem precisar arrastar.
@@ -330,7 +449,9 @@ function atualizarRodape() {
   const btnPdf = document.getElementById("btn-gerar-pdf");
   const btnPng = document.getElementById("btn-gerar-png");
   const btnPdfPedido = document.getElementById("btn-pdf-pedido");
-  const totalItens = Array.from(QTY.values()).filter((q) => q > 0).length;
+  const btnLimpar = document.getElementById("btn-limpar-itens");
+  const totalItens = totalItensMarcados();
+  btnLimpar.disabled = totalItens === 0;
   if (totalItens > 0) {
     btn.textContent = `Enviar interesse (${totalItens} ${totalItens === 1 ? "item" : "itens"})`;
     btn.disabled = false;
@@ -1111,6 +1232,8 @@ document.getElementById("btn-enviar-interesse").addEventListener("click", () => 
     `\n\n_(Vamos negociar esses itens!)_`;
 
   const url = `https://wa.me/${VENDEDOR_WHATSAPP}?text=${encodeURIComponent(mensagem)}`;
+  ENVIADO_EM = Date.now();
+  salvarItensMarcados();
   window.open(url, "_blank");
 });
 
@@ -1281,10 +1404,14 @@ async function iniciar() {
   TODOS_ITENS = itens;
   document.getElementById("texto-semana").textContent = `${itens.length} itens`;
 
+  CHAVE_GUARDADOS = `escolar-itens-marcados:${slug}`;
+  carregarItensMarcados();
+
   renderizarAbas();
   renderizarItens();
   atualizarRodape();
   mostrarEstado("app");
+  perguntarSeJaEnviou();
 }
 
 function iniciaisDoNome(nome) {
