@@ -14,17 +14,11 @@
 const CATEGORIAS_INFO = {
   "Borrachas e Apontadores": { bg: "#FCE9EE", fg: "#B0345A" },
   "Canetas": { bg: "#E4ECFA", fg: "#1E4FA3" },
-  "Canetinhas": { bg: "#EFE6F8", fg: "#6B3FA0" },
-  "Colas": { bg: "#E6F4EE", fg: "#1D7A55" },
-  "Corretivos": { bg: "#EEF1F4", fg: "#4A5868" },
-  "Escritório": { bg: "#ECEBE6", fg: "#5E5D59" },
-  "Estojos": { bg: "#FFF1DD", fg: "#A35F0A" },
-  "Lápis de Cor, Giz e Massinha": { bg: "#FDEBE2", fg: "#B4481F" },
-  "Lápis, Lapiseiras e Grafites": { bg: "#FFF6D6", fg: "#8A6A00" },
-  "Marca-texto e Marcadores": { bg: "#F3F8DC", fg: "#5E7A10" },
-  "Mochilas": { bg: "#E2F1F6", fg: "#1A6E86" },
-  "Réguas": { bg: "#E8EEF8", fg: "#33558C" },
-  "Tesouras e Estiletes": { bg: "#F1E9E4", fg: "#7A4A30" },
+  "Canetinhas e Marcadores": { bg: "#EFE6F8", fg: "#6B3FA0" },
+  "Cola, Tesoura e Mais": { bg: "#E6F4EE", fg: "#1D7A55" },
+  "Estojos e Mochilas": { bg: "#E2F1F6", fg: "#1A6E86" },
+  "Lápis de Cor e Giz": { bg: "#FDEBE2", fg: "#B4481F" },
+  "Lápis e Lapiseiras": { bg: "#FFF6D6", fg: "#8A6A00" },
   "Outros": { bg: "#ECECEA", fg: "#5E5D59" },
 };
 const ORDEM_CATEGORIAS = Object.keys(CATEGORIAS_INFO);
