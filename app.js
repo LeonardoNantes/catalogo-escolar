@@ -90,6 +90,7 @@ async function buscarItensEscolar(area) {
       .from("escolar_itens")
       .select("codigo, codigo_barras, descricao, categoria, preco, ordem")
       .eq("area", area)
+      .eq("ativo", true)
       .order("ordem", { ascending: true })
       .range(inicio, inicio + bloco - 1);
     if (error) throw error;
