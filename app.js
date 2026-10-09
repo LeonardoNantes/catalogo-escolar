@@ -19,6 +19,12 @@ const CATEGORIAS_INFO = {
   "Estojos e Mochilas": { bg: "#E2F1F6", fg: "#1A6E86" },
   "Lápis de Cor e Giz": { bg: "#FDEBE2", fg: "#B4481F" },
   "Lápis e Lapiseiras": { bg: "#FFF6D6", fg: "#8A6A00" },
+  "Cad. 1/4": { bg: "#E8F3FC", fg: "#1C5F94" },
+  "Cad. 1 Matéria Cost.": { bg: "#EAF0FB", fg: "#2A4F8F" },
+  "Cad. 1 Matéria Espiral": { bg: "#E6EEFA", fg: "#24519A" },
+  "Cad. 10 Matérias": { bg: "#ECEBFA", fg: "#4A40A0" },
+  "Cad. 12 a 20 Matérias": { bg: "#F1E9FA", fg: "#6A3B9E" },
+  "Cad. Desenho e Cartografia": { bg: "#FFF0E3", fg: "#A4561A" },
   "Outros": { bg: "#ECECEA", fg: "#5E5D59" },
 };
 const ORDEM_CATEGORIAS = Object.keys(CATEGORIAS_INFO);
@@ -289,6 +295,24 @@ function centralizarAbaAtiva(nav) {
   nav.scrollTo({ left: Math.max(0, alvo), behavior: "smooth" });
 }
 
+// Ordem das abas definida pelo Leonardo (coluna "ordem" da tabela
+// escolar_categorias). Categoria sem posição vai pro fim, em ordem alfabética.
+let ORDEM_ABAS_BANCO = new Map();
+async function carregarOrdemCategorias() {
+  try {
+    const { data, error } = await getClient().from("escolar_categorias").select("nome, ordem");
+    if (error) throw error;
+    ORDEM_ABAS_BANCO = new Map((data || []).map((c) => [c.nome, c.ordem]));
+  } catch (erro) {
+    console.error("[Material Escolar] Não consegui carregar a ordem das abas:", erro);
+  }
+}
+function compararCategorias(a, b) {
+  const oa = ORDEM_ABAS_BANCO.has(a) ? ORDEM_ABAS_BANCO.get(a) : 1000;
+  const ob = ORDEM_ABAS_BANCO.has(b) ? ORDEM_ABAS_BANCO.get(b) : 1000;
+  return oa !== ob ? oa - ob : a.localeCompare(b, "pt-BR");
+}
+
 function renderizarAbas() {
   // Mostra aba pra qualquer categoria que tiver item de verdade — não só
   // as 10 fixas de CATEGORIAS_INFO — pra categoria nova criada no Painel
@@ -297,7 +321,7 @@ function renderizarAbas() {
   // Em ordem alfabética.
   const categoriasPresentes = Array.from(new Set(TODOS_ITENS.map((i) => i.categoria)))
     .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    .sort(compararCategorias);
   const abas = [{ key: "todos", label: "Todos" }, ...categoriasPresentes.map((c) => ({ key: c, label: c }))];
 
   const nav = document.getElementById("categoria-tabs");
@@ -470,7 +494,7 @@ function agruparPorCategoriaOrdenado(itens) {
     if (!porCategoria.has(item.categoria)) porCategoria.set(item.categoria, []);
     porCategoria.get(item.categoria).push(item);
   });
-  const categoriasOrdenadas = Array.from(porCategoria.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const categoriasOrdenadas = Array.from(porCategoria.keys()).sort(compararCategorias);
   return categoriasOrdenadas.map((categoria) => ({
     categoria,
     itens: porCategoria.get(categoria).sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR")),
@@ -1211,7 +1235,7 @@ document.getElementById("btn-enviar-interesse").addEventListener("click", () => 
     porCategoria.get(item.categoria).push(item);
   });
 
-  const categoriasOrdenadas = Array.from(porCategoria.keys()).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const categoriasOrdenadas = Array.from(porCategoria.keys()).sort(compararCategorias);
 
   const blocos = categoriasOrdenadas.map((categoria) => {
     const itensDaCategoria = porCategoria.get(categoria).sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
@@ -1398,6 +1422,7 @@ async function iniciar() {
   TODOS_ITENS = itens;
   document.getElementById("texto-semana").textContent = `${itens.length} itens`;
 
+  await carregarOrdemCategorias();
   CHAVE_GUARDADOS = `escolar-itens-marcados:${slug}`;
   carregarItensMarcados();
 
