@@ -826,25 +826,25 @@ function desenharGradeDeCartoes(ctx, itens, imagensCarregadas, opcoes) {
     ctx.font = "600 17.1px 'Work Sans', sans-serif";
     ctx.fillText(linhaCodigos, x + padCard, yCodigo);
 
+    // Selo vazado (fundo branco + contorno fino) pra gastar menos tinta na impressão.
     ctx.save();
-    ctx.shadowColor = "rgba(246,178,27,0.5)";
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.fillStyle = "#161513";
-    desenharRetanguloArredondado(ctx, xBadge, yBadge, larguraBadge, alturaBadge, 10);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.strokeStyle = "#161513";
+    ctx.lineWidth = 2;
+    desenharRetanguloArredondado(ctx, xBadge + 1, yBadge + 1, larguraBadge - 2, alturaBadge - 2, 10);
     ctx.fill();
+    ctx.stroke();
     ctx.restore();
 
-    ctx.fillStyle = "#FFFFFF";
+    ctx.fillStyle = "#161513";
     ctx.font = "700 15.7px 'Work Sans', sans-serif";
     ctx.textAlign = "left";
     ctx.fillText("R$", xBadge + 11, yBadge + 16);
     ctx.textAlign = "right";
-    ctx.fillStyle = "#D8D6CF";
+    ctx.fillStyle = "#8A877F";
     ctx.fillText("unid", xBadge + larguraBadge - 11, yBadge + 16);
 
-    ctx.fillStyle = "#FFFFFF";
+    ctx.fillStyle = "#161513";
     ctx.font = "italic 900 35.6px 'Montserrat', sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(precoTexto, x + larguraCard / 2, yBadge + alturaBadge - 14);
@@ -1190,19 +1190,22 @@ document.getElementById("btn-gerar-pdf").addEventListener("click", async () => {
       doc.setFontSize(7.2);
       doc.text(linhaCodigos, x + padCard, yCodigo);
 
-      doc.setFillColor(22, 21, 19);
-      doc.roundedRect(xBadge, yBadge, larguraBadge, alturaBadge, 1.6, 1.6, "F");
+      // Selo vazado (fundo branco + contorno fino) pra gastar menos tinta na impressão.
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(22, 21, 19);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(xBadge, yBadge, larguraBadge, alturaBadge, 1.6, 1.6, "FD");
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(6.6);
-      doc.setTextColor(255, 255, 255);
+      doc.setTextColor(22, 21, 19);
       doc.text("R$", xBadge + 2, yBadge + 3.4);
-      doc.setTextColor(216, 214, 207);
+      doc.setTextColor(138, 135, 127);
       doc.text("unid", xBadge + larguraBadge - 2, yBadge + 3.4, { align: "right" });
 
       doc.setFont("helvetica", "bolditalic");
       doc.setFontSize(15);
-      doc.setTextColor(255, 255, 255);
+      doc.setTextColor(22, 21, 19);
       doc.text(precoTexto, x + larguraCard / 2, yBadge + alturaBadge - 3, { align: "center" });
 
       coluna++;
