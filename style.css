@@ -363,3 +363,54 @@ button { font-family: inherit; cursor: pointer; }
 }
 .dialogo-nao { background: #F0EEE6; color: #3D3D3A; }
 .dialogo-sim { background: linear-gradient(135deg, #1E4FA3, #173E82); color: #FFFFFF; }
+
+/* ---------- ORDENAR POR PREÇO (barra azul) ---------- */
+.ordem-preco {
+  appearance: none; -webkit-appearance: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1E4FA3;
+  background: #FFFFFF url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%231E4FA3' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 26px 5px 11px;
+  max-width: 46%;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+}
+.ordem-preco.ativa { background-color: #F7B500; color: #1F1E1D; }
+.ordem-preco[hidden] { display: none; }
+
+/* ---------- FOTO AMPLIADA (toque na foto) ---------- */
+.item-icone.tem-foto { cursor: zoom-in; }
+.foto-zoom-fundo {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(20,20,30,0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.foto-zoom-fundo[hidden] { display: none; }
+.foto-zoom-caixa {
+  position: relative;
+  background: #FFFFFF;
+  border-radius: 18px;
+  padding: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.foto-zoom-img {
+  display: block;
+  width: 180px; height: 180px;   /* 3x a foto do cartão (60px) */
+  max-width: calc(100vw - 68px); max-height: calc(100vw - 68px);
+  object-fit: contain;
+  border-radius: 12px;
+}
+.foto-zoom-fechar {
+  position: absolute; top: -12px; right: -12px;
+  width: 32px; height: 32px;
+  border: none; border-radius: 50%;
+  background: #1F1E1D; color: #FFFFFF;
+  font-size: 20px; line-height: 32px; text-align: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}

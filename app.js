@@ -144,6 +144,7 @@ function formatarPrecoSemPrefixo(valor) {
 const QTY = new Map(); // codigo -> quantidade
 let TODOS_ITENS = [];
 let CATEGORIA_ATIVA = "todos";
+let ORDEM_PRECO = ""; // "" = padrão, "menor" ou "maior" — só vale pra aba aberta
 let BUSCA = ""; // texto da busca (lupa) — já normalizado, vazio = sem busca
 let VENDEDOR_WHATSAPP = null;
 let AREA_VENDEDOR = "SC";
@@ -337,6 +338,8 @@ function renderizarAbas() {
   nav.querySelectorAll(".categoria-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       CATEGORIA_ATIVA = btn.dataset.key;
+      // A ordem por preço vale só pra aba que está aberta: trocou de aba, volta ao padrão.
+      ORDEM_PRECO = "";
       // Tocar numa aba durante a busca sai da busca e mostra a categoria.
       if (BUSCA || !document.getElementById("barra-busca").hidden) {
         const campo = document.getElementById("campo-busca");
@@ -390,6 +393,36 @@ function fecharBusca() {
   renderizarItens();
 }
 
+// ---------------- ORDENAR POR PREÇO ----------------
+document.getElementById("ordem-preco").addEventListener("change", (e) => {
+  ORDEM_PRECO = e.target.value;
+  renderizarItens();
+  window.scrollTo({ top: 0, behavior: "instant" });
+});
+
+// ---------------- FOTO AMPLIADA ----------------
+// Tocar na foto abre ela maior por cima da tela; o catálogo continua atrás,
+// no mesmo lugar. Fecha tocando fora da foto ou no X.
+function abrirFotoAmpliada(url) {
+  const img = document.getElementById("foto-zoom-img");
+  img.src = url;
+  document.getElementById("foto-zoom-fundo").hidden = false;
+}
+function fecharFotoAmpliada() {
+  document.getElementById("foto-zoom-fundo").hidden = true;
+  document.getElementById("foto-zoom-img").removeAttribute("src");
+}
+document.getElementById("lista-itens").addEventListener("click", (e) => {
+  const foto = e.target.closest(".item-icone.tem-foto");
+  if (foto) abrirFotoAmpliada(foto.dataset.foto);
+});
+document.getElementById("foto-zoom-fundo").addEventListener("click", (e) => {
+  if (e.target.id === "foto-zoom-fundo" || e.target.id === "foto-zoom-fechar") fecharFotoAmpliada();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !document.getElementById("foto-zoom-fundo").hidden) fecharFotoAmpliada();
+});
+
 document.getElementById("btn-busca").addEventListener("click", () => {
   if (document.getElementById("barra-busca").hidden) abrirBusca();
   else fecharBusca();
@@ -411,6 +444,14 @@ function renderizarItens() {
   const itensFiltrados = TODOS_ITENS
     .filter((i) => (BUSCA ? itemBateComBusca(i, BUSCA) : CATEGORIA_ATIVA === "todos" || i.categoria === CATEGORIA_ATIVA))
     .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+  // Ordenar por preço (só nas abas — a busca da lupa fica sempre no padrão).
+  if (ORDEM_PRECO && !BUSCA) {
+    itensFiltrados.sort((a, b) => (ORDEM_PRECO === "menor" ? 1 : -1) * ((Number(a.preco) || 0) - (Number(b.preco) || 0)));
+  }
+  const seletorOrdem = document.getElementById("ordem-preco");
+  seletorOrdem.value = ORDEM_PRECO;
+  seletorOrdem.classList.toggle("ativa", !!ORDEM_PRECO);
+  seletorOrdem.hidden = !!BUSCA;
 
   if (itensFiltrados.length === 0) {
     lista.innerHTML = BUSCA
@@ -430,7 +471,7 @@ function renderizarItens() {
       const interessado = qty > 0;
       return `
         <div class="item-card" style="background: ${info.bg};">
-          <div class="item-icone"${item.foto_url ? ` style="background-image:url('${escapeAttr(item.foto_url)}')"` : ""}>${item.foto_url ? "" : iconeCategoria(item.categoria, info.fg)}</div>
+          <div class="item-icone${item.foto_url ? " tem-foto" : ""}"${item.foto_url ? ` data-foto="${escapeAttr(item.foto_url)}" style="background-image:url('${escapeAttr(item.foto_url)}')"` : ""}>${item.foto_url ? "" : iconeCategoria(item.categoria, info.fg)}</div>
           <div class="item-corpo">
             <div class="item-descricao">${escapeHtml(item.descricao)}</div>
             <div class="item-codigos-linha">
