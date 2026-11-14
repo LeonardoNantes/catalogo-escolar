@@ -47,7 +47,7 @@ function getClient() {
 }
 
 // ---------------- TROCA DE TELA ----------------
-const ESTADOS = ["tela-carregando", "tela-erro", "tela-pausado", "tela-vazio", "app"];
+const ESTADOS = ["tela-carregando", "tela-erro", "tela-pausado", "tela-vazio", "app", "tela-carrinho"];
 function mostrarEstado(id) {
   ESTADOS.forEach((e) => { document.getElementById(e).hidden = e !== id; });
 }
@@ -143,7 +143,8 @@ function formatarPrecoSemPrefixo(valor) {
 // ---------------- ESTADO DA PÁGINA (interesse / quantidade) ----------------
 const QTY = new Map(); // codigo -> quantidade
 let TODOS_ITENS = [];
-let CATEGORIA_ATIVA = "todos";
+let CATEGORIA_ATIVA = null; // não existe mais aba "Todos" — definida em iniciar() pra primeira aba do grupo
+let GRUPO_ATIVO = "escolar"; // "escolar", "escrita" ou "cadernos" — mesmos grupos que o Martins usa
 let ORDEM_PRECO = ""; // "" = padrão, "menor" ou "maior" — só vale pra aba aberta
 let BUSCA = ""; // texto da busca (lupa) — já normalizado, vazio = sem busca
 let VENDEDOR_WHATSAPP = null;
@@ -257,7 +258,10 @@ document.getElementById("btn-limpar-itens").addEventListener("click", async () =
     "Sim, desmarcar",
     "Cancelar"
   );
-  if (ok) limparItensMarcados();
+  if (ok) {
+    limparItensMarcados();
+    if (!document.getElementById("tela-carrinho").hidden) renderizarCarrinho();
+  }
 });
 
 // Quando o cliente volta pra página depois de ter tocado em "Enviar
@@ -315,16 +319,42 @@ function compararCategorias(a, b) {
   return oa !== ob ? oa - ob : a.localeCompare(b, "pt-BR");
 }
 
+// ---------------- GRUPOS: Escolar / Escrita / Cadernos ----------------
+// Mesmos grupos que o Martins usa (Material escolar / Instrumento para
+// escrita / Caderno). Cadernos é automático: toda aba que começa com
+// "Cad." vai pra lá. Escrita é a lista fixa abaixo. Todo o resto (inclusive
+// uma aba nova criada no Painel de Preços) cai em "Escolar".
+const ABAS_GRUPO_ESCRITA = ["Canetas", "Canetinhas e Marcadores", "Lápis de Cor e Giz", "Lápis e Lapiseiras"];
+const ORDEM_GRUPOS = ["escolar", "escrita", "cadernos"];
+function grupoDaCategoria(categoria) {
+  if (/^Cad\./i.test(categoria || "")) return "cadernos";
+  if (ABAS_GRUPO_ESCRITA.includes(categoria)) return "escrita";
+  return "escolar";
+}
+function categoriasOrdenadasPresentes() {
+  return Array.from(new Set(TODOS_ITENS.map((i) => i.categoria)))
+    .filter(Boolean)
+    .sort(compararCategorias);
+}
+function categoriasDoGrupo(grupo) {
+  return categoriasOrdenadasPresentes().filter((c) => grupoDaCategoria(c) === grupo);
+}
+function renderizarAbasGrupo() {
+  document.querySelectorAll(".aba-grupo").forEach((btn) => {
+    btn.classList.toggle("ativa", btn.dataset.grupo === GRUPO_ATIVO);
+    // Grupo sem nenhum item publicado nessa área nem aparece.
+    btn.hidden = categoriasDoGrupo(btn.dataset.grupo).length === 0;
+  });
+}
+
 function renderizarAbas() {
   // Mostra aba pra qualquer categoria que tiver item de verdade — não só
   // as 10 fixas de CATEGORIAS_INFO — pra categoria nova criada no Painel
   // de Preços também aparecer aqui (ela só não tem cor/ícone específicos,
   // usa o visual genérico de "Outros" via infoCategoria/iconeCategoria).
   // Em ordem alfabética.
-  const categoriasPresentes = Array.from(new Set(TODOS_ITENS.map((i) => i.categoria)))
-    .filter(Boolean)
-    .sort(compararCategorias);
-  const abas = [{ key: "todos", label: "Todos" }, ...categoriasPresentes.map((c) => ({ key: c, label: c }))];
+  // Só as abas do grupo (Escolar/Escrita/Cadernos) escolhido na faixa de cima.
+  const abas = categoriasDoGrupo(GRUPO_ATIVO).map((c) => ({ key: c, label: c }));
 
   const nav = document.getElementById("categoria-tabs");
   // Guarda onde a barra estava antes de redesenhar (redesenhar zera a
@@ -394,10 +424,59 @@ function fecharBusca() {
 }
 
 // ---------------- ORDENAR POR PREÇO ----------------
-document.getElementById("ordem-preco").addEventListener("change", (e) => {
-  ORDEM_PRECO = e.target.value;
-  renderizarItens();
-  window.scrollTo({ top: 0, behavior: "instant" });
+// Ícone de ordenar + menu (igual ao Nadir e ao Ofertas da Semana)
+function atualizarBotaoOrdenar() {
+  document.getElementById("btn-ordenar").classList.toggle("ativo", !!ORDEM_PRECO);
+  document.querySelectorAll("#menu-ordenar button").forEach((btn) => {
+    btn.classList.toggle("selecionada", (btn.dataset.ordenacao || "") === ORDEM_PRECO);
+  });
+}
+{
+  const menuOrdenar = document.getElementById("menu-ordenar");
+  document.getElementById("btn-ordenar").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menuOrdenar.hidden = !menuOrdenar.hidden;
+  });
+  menuOrdenar.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      ORDEM_PRECO = btn.dataset.ordenacao || "";
+      menuOrdenar.hidden = true;
+      renderizarItens();
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  });
+  // Com o menu aberto, tocar fora só fecha o menu (não soma "+" sem querer).
+  document.addEventListener("click", (e) => {
+    if (!menuOrdenar.hidden && !menuOrdenar.contains(e.target)) {
+      menuOrdenar.hidden = true;
+      e.stopPropagation();
+      e.preventDefault();
+    }
+  }, true);
+}
+
+// Abas de grupo (Escolar / Escrita / Cadernos)
+document.querySelectorAll(".aba-grupo").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const grupo = btn.dataset.grupo;
+    if (grupo === GRUPO_ATIVO) return;
+    GRUPO_ATIVO = grupo;
+    CATEGORIA_ATIVA = categoriasDoGrupo(GRUPO_ATIVO)[0] || null;
+    ORDEM_PRECO = "";
+    // Tocar num grupo durante a busca sai da busca.
+    if (BUSCA || !document.getElementById("barra-busca").hidden) {
+      const campo = document.getElementById("campo-busca");
+      campo.value = "";
+      BUSCA = "";
+      document.getElementById("barra-busca").hidden = true;
+      document.getElementById("btn-busca").classList.remove("ativo");
+      document.getElementById("categoria-tabs").classList.remove("em-busca");
+    }
+    renderizarAbasGrupo();
+    renderizarAbas();
+    renderizarItens();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
 });
 
 // ---------------- FOTO AMPLIADA ----------------
@@ -442,16 +521,14 @@ document.getElementById("campo-busca").addEventListener("keydown", (e) => {
 function renderizarItens() {
   const lista = document.getElementById("lista-itens");
   const itensFiltrados = TODOS_ITENS
-    .filter((i) => (BUSCA ? itemBateComBusca(i, BUSCA) : CATEGORIA_ATIVA === "todos" || i.categoria === CATEGORIA_ATIVA))
+    .filter((i) => (BUSCA ? itemBateComBusca(i, BUSCA) : i.categoria === CATEGORIA_ATIVA))
     .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
   // Ordenar por preço (só nas abas — a busca da lupa fica sempre no padrão).
   if (ORDEM_PRECO && !BUSCA) {
     itensFiltrados.sort((a, b) => (ORDEM_PRECO === "menor" ? 1 : -1) * ((Number(a.preco) || 0) - (Number(b.preco) || 0)));
   }
-  const seletorOrdem = document.getElementById("ordem-preco");
-  seletorOrdem.value = ORDEM_PRECO;
-  seletorOrdem.classList.toggle("ativa", !!ORDEM_PRECO);
-  seletorOrdem.hidden = !!BUSCA;
+  atualizarBotaoOrdenar();
+  document.getElementById("ordenar-wrap").hidden = !!BUSCA;
 
   if (itensFiltrados.length === 0) {
     lista.innerHTML = BUSCA
@@ -471,7 +548,7 @@ function renderizarItens() {
       const interessado = qty > 0;
       return `
         <div class="item-card" style="background: ${info.bg};">
-          <div class="item-icone${item.foto_url ? " tem-foto" : ""}"${item.foto_url ? ` data-foto="${escapeAttr(item.foto_url)}" style="background-image:url('${escapeAttr(item.foto_url)}')"` : ""}>${item.foto_url ? "" : iconeCategoria(item.categoria, info.fg)}</div>
+          <div class="item-icone${item.foto_url ? " tem-foto" : ""}"${item.foto_url ? ` data-foto="${escapeAttr(item.foto_url)}"` : ""}>${item.foto_url ? `<img class="item-foto-miniatura" src="${escapeAttr(item.foto_url)}" alt="" loading="lazy">` : iconeCategoria(item.categoria, info.fg)}</div>
           <div class="item-corpo">
             <div class="item-descricao">${escapeHtml(item.descricao)}</div>
             <div class="item-codigos-linha">
@@ -505,26 +582,83 @@ function renderizarItens() {
 }
 
 function atualizarRodape() {
-  const btn = document.getElementById("btn-enviar-interesse");
-  const btnPdf = document.getElementById("btn-gerar-pdf");
-  const btnPng = document.getElementById("btn-gerar-png");
-  const btnPdfPedido = document.getElementById("btn-pdf-pedido");
-  const btnLimpar = document.getElementById("btn-limpar-itens");
+  const btn = document.getElementById("btn-ir-carrinho");
   const totalItens = totalItensMarcados();
-  btnLimpar.disabled = totalItens === 0;
-  if (totalItens > 0) {
-    btn.textContent = `Enviar interesse (${totalItens} ${totalItens === 1 ? "item" : "itens"})`;
-    btn.disabled = false;
-    btnPdf.disabled = false;
-    btnPng.disabled = false;
-    btnPdfPedido.disabled = false;
-  } else {
-    btn.textContent = "Marque os itens de interesse";
-    btn.disabled = true;
-    btnPdf.disabled = true;
-    btnPng.disabled = true;
-    btnPdfPedido.disabled = true;
+  const tem = totalItens > 0;
+  btn.textContent = tem ? `Ir para o carrinho (${totalItens} ${totalItens === 1 ? "item" : "itens"})` : "Nenhum item selecionado";
+  btn.disabled = !tem;
+  ["btn-gerar-pdf", "btn-gerar-png", "btn-pdf-pedido", "btn-limpar-itens"].forEach((id) => {
+    document.getElementById(id).disabled = !tem;
+  });
+}
+
+// ---------------- TELA DO CARRINHO ----------------
+// Itens marcados agrupados por categoria, na mesma ordem das abas.
+function agruparCarrinhoPorCategoria() {
+  const itensMarcados = TODOS_ITENS.filter((i) => (QTY.get(i.codigo) || 0) > 0);
+  const porCategoria = new Map();
+  itensMarcados.forEach((item) => {
+    if (!porCategoria.has(item.categoria)) porCategoria.set(item.categoria, []);
+    porCategoria.get(item.categoria).push(item);
+  });
+  return Array.from(porCategoria.keys()).sort(compararCategorias).map((categoria) => ({
+    categoria,
+    itens: porCategoria.get(categoria).sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR")),
+  }));
+}
+
+function renderizarCarrinho() {
+  const lista = document.getElementById("lista-carrinho");
+  const grupos = agruparCarrinhoPorCategoria();
+  if (grupos.length === 0) {
+    lista.innerHTML = `
+      <div class="carrinho-vazio">
+        <span class="carrinho-vazio-icone">🛒</span>
+        <p>Seu carrinho está vazio.<br>Volte e marque os itens que te interessam.</p>
+      </div>
+    `;
+    return;
   }
+  lista.innerHTML = grupos.map((grupo) => {
+    const linhasItens = grupo.itens.map((item) => {
+      const qty = QTY.get(item.codigo) || 0;
+      return `
+        <div class="carrinho-item-linha">
+          <div class="carrinho-item-info">
+            <p class="carrinho-item-nome">${escapeHtml(item.descricao)}</p>
+            <p class="carrinho-item-codigo">Cód. ${escapeHtml(item.codigo)}${item.codigo_barras ? ` • Barras ${escapeHtml(item.codigo_barras)}` : ""}</p>
+            <p class="carrinho-item-preco">${formatarPreco(item.preco)} cada</p>
+          </div>
+          <div class="item-qty" data-codigo="${escapeAttr(item.codigo)}">
+            <button type="button" class="btn-dec" aria-label="Diminuir quantidade">−</button>
+            <div class="qty-valor">${qty}</div>
+            <button type="button" class="btn-inc" aria-label="Aumentar quantidade">+</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+    return `
+      <div class="grupo-carrinho">
+        <div class="grupo-carrinho-titulo">${escapeHtml(grupo.categoria)}</div>
+        <div class="grupo-carrinho-itens">${linhasItens}</div>
+      </div>
+    `;
+  }).join("");
+  lista.querySelectorAll(".item-qty").forEach((el) => {
+    const codigo = el.dataset.codigo;
+    el.querySelector(".btn-dec").addEventListener("click", () => { dec(codigo); renderizarCarrinho(); });
+    el.querySelector(".btn-inc").addEventListener("click", () => { inc(codigo); renderizarCarrinho(); });
+  });
+}
+
+function abrirCarrinho() {
+  renderizarCarrinho();
+  mostrarEstado("tela-carrinho");
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+function voltarDoCarrinho() {
+  renderizarItens();
+  mostrarEstado("app");
 }
 
 // Agrupa por categoria (ordem alfabética) e ordena os itens de cada
@@ -1267,32 +1401,30 @@ document.getElementById("btn-gerar-pdf").addEventListener("click", async () => {
   }
 });
 
-document.getElementById("btn-enviar-interesse").addEventListener("click", () => {
-  const itensMarcados = TODOS_ITENS.filter((i) => (QTY.get(i.codigo) || 0) > 0);
-  if (itensMarcados.length === 0 || !VENDEDOR_WHATSAPP) return;
+// Rodapé do catálogo: só abre o carrinho. O envio pelo WhatsApp acontece
+// de dentro da tela do carrinho (mesmo padrão do Ofertas da Semana).
+document.getElementById("btn-ir-carrinho").addEventListener("click", () => {
+  if (totalItensMarcados() === 0) return;
+  abrirCarrinho();
+});
+document.getElementById("btn-voltar-carrinho").addEventListener("click", voltarDoCarrinho);
 
-  // Agrupa por categoria (não pela ordem que o cliente foi marcando) e
-  // ordena tanto as categorias quanto os itens dentro de cada uma em
-  // ordem alfabética.
-  const porCategoria = new Map();
-  itensMarcados.forEach((item) => {
-    if (!porCategoria.has(item.categoria)) porCategoria.set(item.categoria, []);
-    porCategoria.get(item.categoria).push(item);
-  });
+document.getElementById("btn-enviar-pedido").addEventListener("click", () => {
+  const grupos = agruparCarrinhoPorCategoria();
+  if (grupos.length === 0 || !VENDEDOR_WHATSAPP) return;
 
-  const categoriasOrdenadas = Array.from(porCategoria.keys()).sort(compararCategorias);
-
-  const blocos = categoriasOrdenadas.map((categoria) => {
-    const itensDaCategoria = porCategoria.get(categoria).sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
-    const linhas = itensDaCategoria.map((i) => `Cód: ${i.codigo} | Qtd: ${QTY.get(i.codigo)}`);
-    return `- *${categoria.toUpperCase()}*\n${linhas.join("\n")}`;
+  const nomeLoja = document.getElementById("input-loja").value.trim();
+  const blocos = grupos.map((grupo) => {
+    const linhas = grupo.itens.map((i) => `Cód: ${i.codigo} | Qtd: ${QTY.get(i.codigo)} | ${formatarPreco(i.preco)}`);
+    return `- *${grupo.categoria.toUpperCase()}*\n${linhas.join("\n")}`;
   });
 
   const mensagem =
     `*MATERIAL ESCOLAR*\n` +
+    (nomeLoja ? `_Loja: ${nomeLoja}_\n` : "") +
     `_Olá! tenho interesse nestes itens:_\n\n` +
     blocos.join("\n\n") +
-    `\n\n_(Vamos negociar esses itens!)_`;
+    `\n\n_(Preço final combinado direto com o vendedor, considerando a fração mínima de cada item.)_`;
 
   const url = `https://wa.me/${VENDEDOR_WHATSAPP}?text=${encodeURIComponent(mensagem)}`;
   ENVIADO_EM = Date.now();
@@ -1313,7 +1445,9 @@ document.getElementById("btn-pdf-pedido").addEventListener("click", () => {
   botao.disabled = true;
 
   try {
-    const grupos = agruparPorCategoriaOrdenado(itensMarcados);
+    // Mesmo agrupamento da tela do carrinho (por categoria, na ordem das abas).
+    const grupos = agruparCarrinhoPorCategoria();
+    const nomeLoja = document.getElementById("input-loja").value.trim();
 
     const nomeVendedor = (document.getElementById("nome-vendedor").textContent || "").trim();
     const textoSemana = "";
@@ -1345,6 +1479,10 @@ document.getElementById("btn-pdf-pedido").addEventListener("click", () => {
     const dataTexto = new Date().toLocaleDateString("pt-BR");
     doc.text(`Vendedor: ${nomeVendedor || "-"}   •   Data: ${dataTexto}`, margemX, y);
     y += 6;
+    if (nomeLoja) {
+      doc.text(`Loja: ${nomeLoja}`, margemX, y);
+      y += 6;
+    }
     if (textoSemana) {
       doc.text(textoSemana, margemX, y);
       y += 6;
@@ -1465,12 +1603,15 @@ async function iniciar() {
   }
 
   TODOS_ITENS = itens;
-  document.getElementById("texto-semana").textContent = `${itens.length} itens`;
 
   await carregarOrdemCategorias();
   CHAVE_GUARDADOS = `escolar-itens-marcados:${slug}`;
   carregarItensMarcados();
 
+  // Abre em "Escolar"; se essa área não tiver nada nele, abre no primeiro grupo que tiver.
+  GRUPO_ATIVO = ORDEM_GRUPOS.find((g) => categoriasDoGrupo(g).length > 0) || "escolar";
+  CATEGORIA_ATIVA = categoriasDoGrupo(GRUPO_ATIVO)[0] || null;
+  renderizarAbasGrupo();
   renderizarAbas();
   renderizarItens();
   atualizarRodape();
